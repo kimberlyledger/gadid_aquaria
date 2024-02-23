@@ -1,0 +1,134 @@
+---
+title: "discarded code"
+author: "Kimberly Ledger"
+date: "2024-02-16"
+output: html_document
+---
+
+
+
+
+
+okay, maybe i should not have gotten complicated with the qPCR model... what does the copy number data look like that comes from the QuantStudio exports??? 
+
+```{r}
+raw <- read.csv("~/gadid_aquaria/qPCR_pollock/data/pollock_aquaria_combined_raw_qPCR.csv")
+wells <- read.csv("~/gadid_aquaria/qPCR_pollock/data/Pollock_aquaria_qPCR_well_position.csv")
+```
+
+
+reformat raw qPCR results and link to extraction ID
+```{r}
+qPCR <- raw %>%
+  select(Plate, Well.Position, Sample.Name, Target.Name, Task, CT, Quantity) %>%
+  rename(qPCR_plate = Plate) %>%
+  rename(Well_Position = Well.Position) %>%
+  left_join(wells)
+
+qPCR$CT <- as.numeric(qPCR$CT)
+qPCR$Quantity <- as.numeric(qPCR$Quantity)
+```
+
+```{r}
+qPCR_quants <- qPCR %>%
+  filter(Target.Name == "GACH") %>%
+  filter(Task == "UNKNOWN") %>%
+  group_by(extraction_ID) %>%
+  summarise(Quantity_mean = mean(Quantity),
+            Quantity_sd = sd(Quantity))
+```
+
+```{r}
+extraction_metadata <- read.csv("~/gadid_aquaria/qPCR_pollock/data/gadid_aquaria_metadata_qPCR.csv") %>%
+  select(extraction_ID, tank_ID)
+```
+
+```{r}
+qPCR_summary <- qPCR_quants %>%
+  left_join(extraction_metadata) %>%
+  rename(site_name = tank_ID) %>%
+  left_join(tank_metadata)
+```
+
+plot all samples/extracts
+```{r}
+qPCR_summary %>%
+  ggplot() + 
+  geom_point(aes(x=WP_biomass, y=Quantity_mean, color = site_name)) + 
+  #geom_errorbar(aes(x=WP_biomass, y=MEAN, ymin = q.05, ymax = q.95)) + 
+  scale_x_log10()
+```
+
+calculate tank mean then plot 
+```{r}
+qPCR_tank <- qPCR_summary %>%
+  group_by(site_name) %>%
+  mutate(Quantity_tank_mean = mean(Quantity_mean)) %>%
+  select(!extraction_ID:Quantity_sd) %>%
+  unique()
+```
+
+plot all samples/extracts
+```{r}
+qPCR_tank %>%
+  ggplot() + 
+  geom_point(aes(x=WP_biomass, y=Quantity_tank_mean, color = lab)) + 
+  scale_x_log10()
+```
+
+okay so the high biomass tanks (all in Pole Barn) are the ones that are a bit off.. maybe i can stick to just the Arena tanks 
+
+
+the low biomass WP is one fish and the high biomass WP is two fish 
+
+```{r}
+qPCR_tank %>%
+  filter(lab == "Arena") %>%
+  ggplot() + 
+  geom_point(aes(x=WP_biomass, y=Quantity_tank_mean, color = N_spp)) + 
+  scale_x_log10()
+```
+
+```{r}
+qPCR_tank %>%
+  filter(lab == "Arena") %>%
+  ggplot() + 
+  geom_point(aes(x=WP_biomass, y=Quantity_tank_mean, color = AC_pres)) + 
+  scale_x_log10()
+```
+
+```{r}
+qPCR_tank %>%
+  filter(lab == "Arena") %>%
+  ggplot() + 
+  geom_point(aes(x=WP_biomass, y=Quantity_tank_mean, color = PC_pres)) + 
+  scale_x_log10()
+```
+
+```{r}
+qPCR_tank %>%
+  filter(lab == "Arena") %>%
+  ggplot() + 
+  geom_point(aes(x=WP_biomass, y=Quantity_tank_mean, color = WP_N)) + 
+  scale_x_log10()
+```
+
+```{r}
+qPCR_tank %>%
+  filter(lab == "Arena") %>%
+  ggplot() + 
+  geom_point(aes(x=WP_biomass, y=Quantity_tank_mean, color = AC_pres)) + 
+  scale_x_log10()
+```
+
+
+
+```{r}
+arena <- qPCR_tank %>%
+  filter(lab == "Arena")
+
+model <- lm(Quantity_tank_mean ~ WP_biomass, data = arena)
+summary(model)
+```
+
+

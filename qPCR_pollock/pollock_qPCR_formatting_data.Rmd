@@ -1,0 +1,226 @@
+---
+title: "format results: pollock qPCR of aquaria samples"
+author: "Kimberly Ledger"
+date: "2024-02-14"
+output: html_document
+---
+
+clear working environment
+```{r}
+rm(list=ls())
+```
+
+
+load libraries
+```{r}
+library(tidyverse)
+select <- dplyr::select
+```
+
+load raw qPCR data and associate with extraction ID/sample metadata 
+** NOTE:  the 'pollock_aquaria_combined_raw_qPCR.csv' is the QuantStudio export. a handful of pcr replicates with high IPC CT (not consistant high IPC CT of a sample, just one funky rep) were excluded from the exports. the exports of each run were then combined. 
+** the "pollock_aquaria_no_omits.csv" is combined quantstudio exports with NO wells omitted. 
+
+```{r}
+#raw <- read.csv("~/gadid_aquaria/qPCR_pollock/data/pollock_aquaria_combined_raw_qPCR.csv")
+raw <- read.csv("~/gadid_aquaria/qPCR_pollock/data/pollock_aquaria_no_omits.csv")
+wells <- read.csv("~/gadid_aquaria/qPCR_pollock/data/Pollock_aquaria_qPCR_well_position.csv")
+extraction_metadata <- read.csv("~/gadid_aquaria/qPCR_pollock/data/gadid_aquaria_metadata_qPCR.csv")
+#tank_metadata <- read.csv("~/gadid_aquaria/qPCR_pollock/data/TankData_MBmodified.csv")
+```
+
+reformat raw qPCR results and link to extraction ID
+```{r}
+qPCR <- raw %>%
+  select(Plate, Well.Position, Sample.Name, Target.Name, Task, CT) %>%
+  rename(qPCR_plate = Plate) %>%
+  rename(Well_Position = Well.Position) %>%
+  left_join(wells) #%>%
+  #filter(extraction_ID != "2c")   ## the 2c standard was poor across all plates so i'm going to remove 
+
+qPCR$CT <- as.numeric(qPCR$CT)
+```
+
+calculate standard deviation of CT values 
+```{r}
+qPCR <- qPCR %>%
+  group_by(qPCR_plate, Target.Name, extraction_ID) %>%
+  mutate(CT.SD = sd(CT))
+```
+
+first, let's check if the IPC looks okay
+```{r}
+ipc <- qPCR %>%
+  filter(Target.Name == "MOA") %>%
+  filter(CT.SD > 1) %>%
+  filter(extraction_ID != "NTC")  ## i'm not worried about the negative controls here
+```
+
+let's identify any outlier MOA wells 
+```{r}
+# Function to identify outliers using IQR method
+identify_outlier <- function(values) {
+  q <- quantile(values, c(0.25, 0.75))
+  iqr <- q[2] - q[1]
+  lower_bound <- q[1] - 0.5 * iqr
+  upper_bound <- q[2] + 0.5 * iqr
+  
+  outliers <- values < lower_bound | values > upper_bound
+  
+  return(outliers)
+}
+
+outliers_df <- ipc %>%
+  group_by(qPCR_plate, extraction_ID) %>%
+  mutate(is_outlier = identify_outlier(CT))
+```
+
+save the plate and well info from the MOA outliers so i can remove 
+```{r}
+to_remove <- outliers_df %>%
+  filter(is_outlier == TRUE) %>%
+  select(qPCR_plate, Well_Position, extraction_ID)
+```
+
+filter results 
+```{r}
+qPCR <- qPCR %>%
+  anti_join(to_remove)
+```
+
+
+check for sample inhibition (i.e. shift if MOA CT)
+```{r}
+#mean CT of NTCs
+qPCR %>%
+  filter(Target.Name == "MOA") %>%
+  filter(extraction_ID == "NTC") %>%
+  group_by(qPCR_plate, extraction_ID) %>%
+  summarise(mean_CT = mean(CT))
+
+# something funky happened with the NTC on plate 1, so i'm going to disregard that... 
+mean(c(30.33, 30.91))
+
+#identify any samples with mean CT > 32 
+inhibition <- qPCR %>%
+  filter(Target.Name == "MOA") %>%
+  group_by(qPCR_plate, extraction_ID) %>%
+  summarise(mean_CT = mean(CT)) %>%
+  filter(mean_CT > 31.62)
+inhibition
+```
+
+remove sample with outlier moa CT
+```{r}
+qPCR <- qPCR %>%
+  anti_join(inhibition)
+```
+
+check standards more closely for signs of outliers...
+```{r}
+std_qPCR <- qPCR %>%
+  filter(Task == "STANDARD") %>%
+  rename(Plate = qPCR_plate) %>%
+  select(!Sample.Name) #%>%
+  #filter(CT.SD > 0.5)
+```
+
+based on high Ct of standards in column 12, i will remove some of these all from the analyses
+```{r}
+std_qPCR <- std_qPCR %>%
+  separate(Well_Position, into = c("row", "column"), sep = 1, remove = F) %>%
+  filter(column != 12) %>%
+  group_by(Plate, extraction_ID) %>%
+  mutate(CT.SD.NEW = sd(CT))
+
+### add a couple more outliers
+std_qPCR_2 <- std_qPCR[-c(4,26,28),]
+```
+
+
+first, let me format standards to run on Klymus et al. LOD/LOQ calculator
+```{r}
+qPCR_for_LOD <- std_qPCR_2 %>%
+  rename(Well = Well_Position) %>%
+  rename(Target = Target.Name) %>%
+  select(!Task) %>%
+  select(!CT.SD) %>%
+  select(!CT.SD.NEW) %>%
+  mutate(SQ = ifelse(extraction_ID == "2000000c", 2000000, NA),
+         SQ = ifelse(extraction_ID == "200000c", 200000, SQ),
+         SQ = ifelse(extraction_ID == "20000c", 20000, SQ),
+         SQ = ifelse(extraction_ID == "2000c", 2000, SQ),
+         SQ = ifelse(extraction_ID == "200c", 200, SQ),
+         SQ = ifelse(extraction_ID == "20c", 20, SQ),
+         SQ = ifelse(extraction_ID == "2c", 2, SQ)) %>%
+  rename(Sample = extraction_ID)
+
+## save as RDS objects 
+#saveRDS(qPCR_for_LOD, file = "~/gadid_aquaria/qPCR_pollock/data/pollock_LOD_20240222.RDS")
+```
+
+
+now format qPCR results to input into the Shelton et al. 2019 stan model
+```{r}
+####### i need to format a data frame containing information about the qPCR using known DNA concentrations to create a standard curve
+stand <- std_qPCR_2 %>%
+  rename(qpcr_date = Plate) %>%
+  rename(Position = Well_Position) %>%
+  rename(Detector = Target.Name) %>%
+  select(!CT.SD) %>%
+  select(!CT.SD.NEW) %>%
+  rename(Ct = CT) %>%
+  mutate(pres = ifelse(is.na(Ct), 0, 1 )) %>%
+  mutate(density = ifelse(extraction_ID == "2000000c", 2000000, NA),
+         density = ifelse(extraction_ID == "200000c", 200000, density),
+         density = ifelse(extraction_ID == "20000c", 20000, density),
+         density = ifelse(extraction_ID == "2000c", 2000, density),
+         density = ifelse(extraction_ID == "200c", 200, density),
+         density = ifelse(extraction_ID == "20c", 20, density),
+         density = ifelse(extraction_ID == "2c", 2, density)) %>%
+  mutate(species = "POLLOCK")
+
+
+##### now format data frame containing information about qPCR results from field collected samples. 
+my.dat.samp <- qPCR %>%
+  filter(Target.Name == "GACH") %>%  ## get rid of MOA - it was just used to identify inhibition 
+  filter(Task == "UNKNOWN") %>%
+  rename(qpcr_date = qPCR_plate) %>%
+  rename(Position = Well_Position) %>%
+  select(!Sample.Name) %>%
+  rename(Detector = Target.Name) %>%
+  rename(Ct = CT) %>%
+  mutate(pres = ifelse(is.na(Ct), 0, 1)) %>%
+  mutate(density = NA) %>%
+  mutate(species = "POLLOCK") 
+
+### include tank ID 
+tankID <- extraction_metadata %>%
+  select(extraction_ID, alt_ID, tank_ID) %>%
+  unique()
+
+my.dat.samp <- my.dat.samp %>%
+  left_join(tankID) %>%
+  rename(lab_lab = extraction_ID) %>%
+  rename(site_name = tank_ID)
+
+########  a data frame containing information about qPCR results from control samples (samples which should have no DNA and exist to look for contamination during the laboratory processing)
+control <- qPCR %>%
+  filter(Task == "NTC") %>%
+  rename(qpcr_date = qPCR_plate) %>%
+  rename(Position = Well_Position) %>%
+  rename(Detector = Target.Name) %>%
+  rename(Ct = CT) %>%
+  mutate(density = NA) %>%
+  rename(lab_lab = extraction_ID) %>%
+  mutate(pres = ifelse(is.na(Ct), 0, 1 )) %>%
+  mutate(species = "POLLOCK")
+
+## put data into lists 
+qPCR_data_pollock <- list(stand, my.dat.samp, control)
+
+## save as RDS objects 
+saveRDS(qPCR_data_pollock, file = "~/gadid_aquaria/qPCR_pollock/data/qPCR_data_pollock_20240222.RDS")
+```
+
+
