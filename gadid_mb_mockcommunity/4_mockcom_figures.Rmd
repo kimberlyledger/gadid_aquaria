@@ -1,0 +1,156 @@
+---
+title: "compare clr"
+author: "Kimberly Ledger"
+date: "2023-10-10"
+output: html_document
+---
+
+compare the clr alpha (amplification efficiencies) calculated from each mock community 
+
+
+libraries
+```{r}
+library(tidyverse)
+library(ggplot2)
+```
+
+read in the data
+```{r}
+even <- read.csv("~/gadid_aquaria/gadid_mb_mockcommunity/quant_outputs/gadid_even_CLR.csv")
+north1 <- read.csv("~/gadid_aquaria/gadid_mb_mockcommunity/quant_outputs/gadid_north1_CLR.csv")
+north2 <- read.csv("~/gadid_aquaria/gadid_mb_mockcommunity/quant_outputs/gadid_north2_CLR.csv")
+south1 <- read.csv("~/gadid_aquaria/gadid_mb_mockcommunity/quant_outputs/gadid_south1_CLR.csv")
+south2 <- read.csv("~/gadid_aquaria/gadid_mb_mockcommunity/quant_outputs/gadid_south2_CLR.csv")
+middle <- read.csv("~/gadid_aquaria/gadid_mb_mockcommunity/quant_outputs/gadid_middle_CLR.csv")
+
+all_mock <- even %>%
+  bind_rows(north1, north2, south1, south2, middle)
+
+my_order_communities <- c("even", "north1", "north2", "middle", "south1", "south2")
+all_mock$mock <- factor(all_mock$mock, levels = my_order_communities)
+
+#create offset for plotting 
+all_mock <- all_mock %>%
+  mutate(offset.plot = 0,
+         offset.plot = ifelse(mock=="even",0.25,offset.plot),
+         offset.plot = ifelse(mock=="north1",0.15,offset.plot), 
+         offset.plot = ifelse(mock=="north2",0.05,offset.plot),
+         offset.plot = ifelse(mock=="middle",-0.05,offset.plot), 
+         offset.plot = ifelse(mock=="south1",-0.15,offset.plot),
+         offset.plot = ifelse(mock=="south2",-0.25,offset.plot))
+
+#create spp index 
+all_mock <- all_mock %>%
+  mutate(spp.index = as.numeric(as.factor(all_mock$SP)))
+```
+
+
+```{r}
+p_clr_mock_compare <-  ggplot(all_mock) +
+    geom_errorbarh(aes(xmin=q.25,xmax=q.75,y=SP),size=2,height=0) +
+    geom_errorbarh(aes(xmin=q.025,xmax=q.975,y=SP),size=0.8,height=0) +
+    geom_point(aes(x=Mean,y=SP,fill=mock),size=3,shape=21) +
+    geom_vline(xintercept=0,linetype="dashed") +
+    #scale_fill_manual(values=clr_alpha_sum$manual.col %>% as.character()) +
+    scale_x_continuous("Amplification Efficiency (CLR)") +
+    scale_y_discrete(NULL) +
+    theme_bw() +
+    theme(legend.position = "right",
+          axis.text.y = element_text(size=10))
+
+p_clr_mock_compare
+```
+```{r}
+#my_colors <- c("#323232", "#0199CC", "#66E6FF", "#99FEFF", "#CCFEFF", "#E6E6E6")
+my_colors <- c("#323232", "#0077b6", "#00b4d8", "#90e0ef", "#caf0f8", "#E6E6E6")
+```
+
+
+```{r}
+p_clr_mock_compare <-  ggplot(all_mock) +
+    geom_errorbarh(aes(xmin=q.25,xmax=q.75,y=spp.index+offset.plot),size=1.5,height=0) +
+    geom_errorbarh(aes(xmin=q.025,xmax=q.975,y=spp.index+offset.plot),size=0.5,height=0) +
+    geom_point(aes(x=Mean, y=spp.index+offset.plot,fill=mock),size=3,shape=21) +
+    geom_vline(xintercept=0,linetype="dashed") +
+    scale_fill_manual(values = my_colors) + 
+    scale_x_continuous("Amplification Efficiency (CLR)") +
+    #scale_y_discrete(NULL) +
+    scale_y_reverse(NULL) +
+    theme_bw() +
+    labs(fill = "mock community") + 
+    theme(legend.position = "right",
+          #axis.text.y = element_text(size=10),
+          axis.text.y = element_blank()) + 
+    geom_text(aes(x = -0.03, y = 1, label = "Arctogadus glacialis"), fontface = "italic") +
+    geom_text(aes(x = 0.03, y = 2, label = "Boreogadus saida"), fontface = "italic") +
+    geom_text(aes(x = 0.03, y = 3, label = "Eleginus gracilis"), fontface = "italic") +
+    geom_text(aes(x = -0.025, y = 4, label = "Gadus chalcogrammus"), fontface = "italic") +
+    geom_text(aes(x = -0.033, y = 5, label = "Gadus macrocephalus"), fontface = "italic") +
+    geom_text(aes(x = -0.03, y = 6, label = "Microgadus proximus"), fontface = "italic") 
+
+p_clr_mock_compare
+```
+
+```{r}
+ggsave("~/gadid_aquaria/gadid_mb_mockcommunity/amplification_efficiency.png", plot = p_clr_mock_compare, width = 8, height = 5, dpi = 300)
+```
+
+
+just plot the mean of all the mocks (except South1)
+```{r}
+p_clr_mock_simple <- all_mock %>%
+  filter(mock != "south1") %>%
+    ggplot() +
+    geom_errorbarh(aes(xmin=q.25,xmax=q.75,y=spp.index+offset.plot),size=1.5,height=0) +
+    geom_errorbarh(aes(xmin=q.025,xmax=q.975,y=spp.index+offset.plot),size=0.5,height=0) +
+    geom_point(aes(x=Mean, y=spp.index+offset.plot,fill=mock),size=3,shape=21) +
+    geom_vline(xintercept=0,linetype="dashed") +
+    scale_fill_manual(values = my_colors) + 
+    scale_x_continuous("Amplification Efficiency (CLR)") +
+    #scale_y_discrete(NULL) +
+    scale_y_reverse(NULL) +
+    theme_bw() +
+    labs(fill = "mock community") + 
+    theme(legend.position = "right",
+          #axis.text.y = element_text(size=10),
+          axis.text.y = element_blank()) + 
+    geom_text(aes(x = -0.02, y = 1, label = "Polar cod")) +
+    geom_text(aes(x = 0.015, y = 2, label = "Arctic cod")) +
+    geom_text(aes(x = 0.015, y = 3, label = "Saffron cod")) +
+    geom_text(aes(x = -0.017, y = 4, label = "Walleye pollock")) +
+    geom_text(aes(x = -0.027, y = 5, label = "Pacific cod")) +
+    geom_text(aes(x = -0.012, y = 6, label = "Pacific tomcod")) 
+
+p_clr_mock_simple
+```
+
+```{r}
+ggsave("~/gadid_aquaria/gadid_mb_mockcommunity/amplification_efficiency_common.png", plot = p_clr_mock_simple, width = 8, height = 5, dpi = 300)
+```
+
+
+
+south1 look likes three of the six species are outliers... will NOT use that one as a "true" mock community.  
+all others look okay to use... maybe not south2? 
+
+make a plot without south1 
+```{r}
+p_clr_mock_compare <-  all_mock %>%
+  filter(mock !="south1") %>%
+  ggplot() +
+    #geom_errorbarh(aes(xmin=q.25,xmax=q.75,y=SP),size=2,height=0) +
+    #geom_errorbarh(aes(xmin=q.025,xmax=q.975,y=SP),size=0.8,height=0) +
+    geom_point(aes(x=Mean,y=SP,fill=mock),size=3,shape=21) +
+    geom_vline(xintercept=0,linetype="dashed") +
+    #scale_fill_manual(values=clr_alpha_sum$manual.col %>% as.character()) +
+    scale_x_continuous("Amplification Efficiency (CLR)") +
+    scale_y_discrete(NULL) +
+    theme_bw() +
+    theme(legend.position = "right",
+          axis.text.y = element_text(size=10))
+
+p_clr_mock_compare
+```
+
+
+

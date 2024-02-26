@@ -1,0 +1,508 @@
+---
+title: "quantitative metabarcoding figures for mock communities"
+author: "Kimberly Ledger"
+date: "2023-10-06"
+output: html_document
+---
+
+load libraries
+```{r}
+library(tidyverse)
+library(data.table)
+library(gridExtra)
+library(ggsci)
+```
+
+# Read in the posteriors for mock communities
+```{r}
+load("/home/kimberly.ledger/gadid_aquaria/gadid_mb_mockcommunity/quant_outputs/raw_20231016_even.Rdata")
+raw <- Output
+
+load("/home/kimberly.ledger/gadid_aquaria/gadid_mb_mockcommunity/quant_outputs/mock_20231016_even.Rdata")
+mock1 <- Output
+```
+
+```{r}
+#########################################################
+# Raw estimates from Reads
+#########################################################
+# summarize raw estimates from reads for each species.
+raw.raw <- raw$env %>% 
+  group_by(community,Cycles,tech_rep) %>%
+  mutate(sum.ng = sum(start_conc_ng),
+         true.prop = start_conc_ng / sum.ng) %>%
+  ungroup() %>%
+  group_by(Species,community,Cycles,true.prop) %>%
+  group_by(Species,community,Cycles) %>%
+  summarize(simple.Mean=mean(propReads),
+            simple.N = length(tech_rep)) %>%
+  replace_na(list(raw.Mean=0,raw.SD=0,raw.SE=0))
+
+# extract predicted proportions from the posterior
+COM <- data.frame(community = levels(raw$env$community %>% as.factor()))
+COM$comm_idx <- 1:nrow(COM)
+SP  <- raw$env %>% distinct(Species,sp_idx) %>% as.data.frame()
+
+# These are the predicted intercepts for the posteriors
+beta_posterior <- raw$stanMod_summary[["int_samp_small"]][, c(1,4:8)]
+colnames(beta_posterior) <- paste0("raw.",substr(colnames(beta_posterior),1,nchar(colnames(beta_posterior))-1))
+colnames(beta_posterior)[1] <- "raw.mean"
+beta_posterior <- as.data.frame(beta_posterior)
+
+raw.post <-expand.grid(comm_idx = COM$comm_idx,sp_idx =SP$sp_idx) %>% 
+  arrange(comm_idx,sp_idx) %>% 
+  left_join(.,COM) %>% 
+  left_join(.,SP) %>% 
+  bind_cols(.,beta_posterior)
+
+# Combine the raw estimates and posterior estimates
+raw.all <- full_join(raw.raw,raw.post)
+```
+```{r}
+#########################################################
+# Mock1
+#########################################################
+# summarize raw estimates from reads for each species.
+mock1.raw <- mock1$env %>% group_by(community,Cycles,tech_rep) %>%
+      mutate(sum.ng = sum(start_conc_ng),
+             true.prop = start_conc_ng / sum.ng) %>%
+      ungroup() %>%
+      group_by(Species,community,Cycles,true.prop) %>%
+  summarize(simple.Mean=mean(propReads),
+            simple.N = length(tech_rep)) %>%
+  replace_na(list(raw.Mean=0,raw.SD=0,raw.SE=0))
+
+# extract predicted proportions from the posterior
+COM <- data.frame(community = levels(mock1$env$community %>% as.factor()))
+COM$comm_idx <- 1:nrow(COM)
+SP  <- mock1$env %>% distinct(Species,sp_idx) %>% as.data.frame()
+
+# These are the predicted intercepts for the posteriors
+beta_posterior <- mock1$stanMod_summary[["int_samp_small"]][, c(1,4:8)]
+colnames(beta_posterior) <- paste0("mock1.",substr(colnames(beta_posterior),1,nchar(colnames(beta_posterior))-1))
+colnames(beta_posterior)[1] <- "mock1.mean"
+beta_posterior <- as.data.frame(beta_posterior)
+
+mock1.post <-expand.grid(comm_idx = COM$comm_idx,sp_idx =SP$sp_idx) %>% 
+    arrange(comm_idx,sp_idx) %>% 
+    left_join(.,COM) %>% 
+    left_join(.,SP) %>% 
+    bind_cols(.,beta_posterior)
+
+# Combine the raw estimates and posterior estimates
+mock1.all <- full_join(mock1.raw,mock1.post)
+```
+
+```{r}
+# Combine mock results with raw reads.
+result.dat <- left_join(mock1.all,raw.all)
+```
+
+plot how each of the mock communities set as unknown performed 
+```{r}
+# pull out just M1 for plotting.
+spread=0.15
+M1.dat <- result.dat %>% 
+  filter(true.prop > 0,community=="middle")
+M1.dat <- bind_cols(M1.dat, data.frame(offset= seq(-spread,spread,length.out=nrow(M1.dat))))
+# pull out just N1 for plotting.
+N1.dat <- result.dat %>% 
+  filter(true.prop > 0,community=="north1")
+N1.dat <- bind_cols(N1.dat, data.frame(offset= seq(-spread,spread,length.out=nrow(N1.dat))))
+# pull out just S1 for plotting.
+S1.dat <- result.dat %>% 
+  filter(true.prop > 0,community=="south1")
+S1.dat <- bind_cols(S1.dat,data.frame(offset= seq(-spread,spread,length.out=nrow(S1.dat))))
+# pull out just N2 for plotting.
+N2.dat <- result.dat %>% 
+  filter(true.prop > 0,community=="north2")
+N2.dat <- bind_cols(N2.dat, data.frame(offset= seq(-spread,spread,length.out=nrow(N2.dat))))
+# pull out just S2 for plotting.
+S2.dat <- result.dat %>% 
+  filter(true.prop > 0,community=="south2")
+S2.dat <- bind_cols(S2.dat,data.frame(offset= seq(-spread,spread,length.out=nrow(S2.dat))))
+
+# Make plots
+BREAKS <- c(0.0,0.05,0.10,0.25,0.50)
+x.labs <- c("None","Mock")                          ## not sure what this is designating later on 
+x.at   <- c(1,2)
+
+skew_plot <- function(dat,
+                      BREAKS=BREAKS,x.labs=x.labs,x.at=x.at){
+  
+  #shape.val = c(21,22)
+  #col.val = pal_jco(palette = c("default"), alpha = 1)(10)[c(1,4)]
+  
+  skew.plot <-  ggplot(dat) +
+    scale_color_gradientn(colours = rainbow(4)) +
+    geom_errorbar(aes(x=1+offset,
+                      ymin=raw.2.5,   
+                      ymax=raw.97.5,color=true.prop),width=0,alpha=0.75)   +
+    geom_point(aes(x=1+offset,y=raw.mean, #shape=true.prop,
+                   fill=true.prop,color=true.prop),size=2) +
+    # mock with mock communities at multiple PCR
+     geom_errorbar(aes(x=2+offset,
+                       ymin= mock1.2.5, 
+                       ymax= mock1.97.5, color = true.prop),width=0,alpha=0.5)   +
+     geom_point(aes(x=2+offset,mock1.mean, #shape=true.prop,
+                    fill=true.prop,color=true.prop), size=2) +
+    #scale_shape_manual(values =c(21,22)) +
+    #scale_fill_manual(values= col.val, "True value") +
+    #scale_color_manual(values= col.val,"True value") +
+    scale_y_continuous("Proportion",
+                       trans="sqrt",
+                       # trans="log",
+                       breaks = BREAKS,expand=c(0,NA),limits = c(0,NA)) +
+    geom_hline(aes(yintercept = true.prop,color=true.prop),linetype="dashed") +
+    #geom_point(aes(x=0.70,y=true.prop,shape=true.prop,fill=true.prop),size=3) +
+    scale_x_continuous(name=NULL,breaks=x.at,labels = x.labs) +
+    theme_classic() +
+    theme(legend.position = "none")
+  
+  return(skew.plot)
+}
+
+
+M1_plot <- skew_plot(dat=M1.dat,
+                          BREAKS=BREAKS,x.labs=x.labs,x.at=x.at) 
+M1_plot                
+
+N1_plot <- skew_plot(dat=N1.dat,
+                          BREAKS=BREAKS,x.labs=x.labs,x.at=x.at) 
+S1_plot <- skew_plot(dat=S1.dat,
+                          BREAKS=BREAKS,x.labs=x.labs,x.at=x.at) 
+N2_plot <- skew_plot(dat=N2.dat,
+                          BREAKS=BREAKS,x.labs=x.labs,x.at=x.at) 
+
+S2_plot <- skew_plot(dat=S2.dat,
+                          BREAKS=BREAKS,x.labs=x.labs,x.at=x.at) 
+
+p3 <- grid.arrange(M1_plot + ggtitle(NULL,subtitle="Middle1"),
+              N1_plot +ggtitle(NULL,subtitle="North1"),
+              N2_plot +ggtitle(NULL,subtitle="North2"),
+              S1_plot + ggtitle(NULL,subtitle="South1"),
+              S2_plot + ggtitle(NULL,subtitle="South2"),
+              ncol=5,nrow=1)
+#ggsave(p3, filename = "/home/kimberly.ledger/gadid_metabarcoding/mock_community/mockcom_comparison/gadid_even_meanestimates.jpg", width = 9, height = 5, units = "in")
+```
+
+
+```{r}
+## let me try to squish this into one plot 
+all.dat <- M1.dat %>%
+  bind_rows(N1.dat) %>%
+  bind_rows(N2.dat) %>%
+  bind_rows(S1.dat) %>%
+  bind_rows(S2.dat)
+
+skew_plot <- function(dat,
+                      BREAKS=BREAKS,x.labs=x.labs,x.at=x.at){
+  
+  #shape.val = c(21,22)
+  #col.val = pal_jco(palette = c("default"), alpha = 1)(10)[c(1,4)]
+  
+  skew.plot <-  ggplot(dat) +
+    scale_color_gradientn(colours = rainbow(4)) +
+    geom_errorbar(aes(x=1+offset,
+                      ymin=raw.2.5,   
+                      ymax=raw.97.5,color=true.prop),width=0,alpha=0.75)   +
+    geom_point(aes(x=1+offset,y=raw.mean, #shape=true.prop,
+                   fill=true.prop,color=true.prop),size=2) +
+    # mock with mock communities at multiple PCR
+     geom_errorbar(aes(x=2+offset,
+                       ymin= mock1.2.5, 
+                       ymax= mock1.97.5, color = true.prop),width=0,alpha=0.5)   +
+     geom_point(aes(x=2+offset,mock1.mean, #shape=true.prop,
+                    fill=true.prop,color=true.prop), size=2) +
+    #scale_shape_manual(values =c(21,22)) +
+    #scale_fill_manual(values= col.val, "True value") +
+    #scale_color_manual(values= col.val,"True value") +
+    scale_y_continuous("Proportion",
+                       trans="sqrt",
+                       # trans="log",
+                       breaks = BREAKS,expand=c(0,NA),limits = c(0,NA)) +
+    geom_hline(aes(yintercept = true.prop,color=true.prop),linetype="dashed") +
+    #geom_point(aes(x=0.70,y=true.prop,shape=true.prop,fill=true.prop),size=3) +
+    scale_x_continuous(name=NULL,breaks=x.at,labels = x.labs) +
+    theme_classic() +
+    theme(legend.position = "none")
+  
+  return(skew.plot)
+}
+
+all_plot <- skew_plot(dat=all.dat,
+                          BREAKS=BREAKS,x.labs=x.labs,x.at=x.at) 
+all_plot
+
+ggsave(plot= all_plot, 
+      filename = ("~/gadid_aquaria/gadid_mb_mockcommunity/mock_adjustments.png"),
+      width=5,
+      height = 3,
+      dpi = 300,
+      units = c("in"))
+```
+
+
+```{r}
+my_colors <- c("#898E8C", "#6a6599", "#b24746", "#00a1d5", "#79af97", "#df8f44")
+```
+
+plot each of the unknown mock communities - true, mean raw, and mean mock-adjusted 
+```{r}
+temp1 <- result.dat %>%
+  dplyr::select(Species, community, true.prop, mock1.mean, raw.mean)
+
+#temp1 <- raw.post %>%
+#  dplyr::select(Species, community, raw.mean)
+
+temp2 <- temp1[,c(2:6)] %>%
+  pivot_longer(cols = c(3:5), names_to = "method", values_to = "prop")
+
+# get rid of reference species denotation
+temp2 <- temp2 %>%
+  mutate(SP= ifelse(grepl("zRefSpecies_",Species),
+  substr(Species,13,nchar(Species)),
+  as.character(Species)))
+
+# rename "method"
+temp3 <- temp2 %>%
+  mutate(method = ifelse(method == "true.prop", "true proportion", method),
+         method = ifelse(method == "mock1.mean", "mock adjusted", method),
+         method = ifelse(method == "raw.mean", "raw proportion", method)) 
+
+my_order <- c("true proportion", "raw proportion", "mock adjusted")
+temp3$method <- factor(temp3$method, levels = my_order)
+
+my_order_communities <- c("north1", "north2", "middle", "south1", "south2")
+temp3$community <- factor(temp3$community, levels = my_order_communities)
+
+plot_prop <- temp3 %>%
+  ggplot(aes(x=method, y=prop, fill=SP)) +
+  geom_bar(stat = "identity") + 
+  theme_bw() +
+  scale_fill_manual(values = my_colors) + 
+  facet_grid(~community, scales = 'free') +
+  labs(
+    y = "proportion of sequencing reads",
+    x = "method",
+    title = "even as true mock") + 
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 0.95),
+    legend.text = element_text(size = 8),
+    legend.key.size = unit(0.3, "cm"),
+    legend.position = "right",
+    legend.title = element_blank()
+  )
+
+plot_prop
+```
+
+```{r}
+ggsave("~/gadid_aquaria/gadid_mb_mockcommunity/evenmock_simple.png", plot = plot_prop, width = 6, height = 5, dpi = 300)
+```
+
+
+```{r}
+###############################################################333
+#### Pull out estimates of alpha, convert to CLR                        
+###############################################################333
+
+
+p_space_mock1 <- (exp(mock1$pars$alpha) / rowSums(exp(mock1$pars$alpha))) %>% as.data.frame()
+
+clr_alpha_list_mock <- compositions::clr(p_space_mock1)
+
+clr_alpha <- clr_alpha_list_mock %>% as.data.frame()
+
+mock.sp   <- data.frame(Species=mock1.post %>% distinct(Species) %>% pull(Species))
+
+colnames(clr_alpha) <- mock.sp$Species                       
+clr_alpha_sum <- clr_alpha %>% 
+                    pivot_longer( .,
+                          cols = colnames(clr_alpha),
+                          names_to="species",values_to="val") %>%
+                    group_by(species) %>%
+                    summarize(Mean = mean(val),
+                        SD=sd(val),
+                        q.025 = quantile(val,probs=0.025),
+                        q.05 = quantile(val,probs=0.05),
+                        q.25 = quantile(val,probs=0.25),
+                        q.75 = quantile(val,probs=0.75),
+                        q.95 = quantile(val,probs=0.95),
+                        q.975 = quantile(val,probs=0.975))    
+
+clr_alpha_sum <- clr_alpha_sum %>% arrange(Mean)
+
+# get rid of reference species denotion
+clr_alpha_sum <- clr_alpha_sum %>%
+                      mutate(SP= ifelse(grepl("zRefSpecies_",species),
+                                       substr(species,13,nchar(species)),
+                                       as.character(species)))
+
+p_clr_mock2 <-  ggplot(clr_alpha_sum) +
+    geom_errorbarh(aes(xmin=q.25,xmax=q.75,y=SP),size=2,height=0) +
+    geom_errorbarh(aes(xmin=q.025,xmax=q.975,y=SP),size=0.8,height=0) +
+    geom_point(aes(x=Mean,y=SP,fill=SP,),size=3,shape=21) +
+    geom_vline(xintercept=0,linetype="dashed") +
+    #scale_fill_manual(values=clr_alpha_sum$manual.col %>% as.character()) +
+    scale_x_continuous("Amplification Efficiency (CLR)") +
+    scale_y_discrete(NULL) +
+    theme_bw() +
+    theme(legend.position = "none",
+          axis.text.y = element_text(size=10))
+
+p_clr_mock2
+```
+
+```{r}
+#ggsave(p_clr_mock2, filename = "/home/kimberly.ledger/gadid_metabarcoding/aquaria_DBO/quant_outputs/gadid_even_CLR.pdf", width = 5, height = 5, units = "in")
+  
+clr_alpha_sum <- clr_alpha_sum %>%
+  mutate(mock = "even")
+
+write.csv(clr_alpha_sum, "/home/kimberly.ledger/gadid_metabarcoding/aquaria_DBO/quant_outputs/gadid_even_CLR.csv", row.names = F)
+```
+
+
+```{r}
+####################################################33
+# Calculate Aitchison Distance
+####################################################33
+
+
+# Aitchison distance
+# Calculate for raw, mock, and pcr in 
+
+# Make containers for each type of output
+make.cont <- function(dat){
+  out <-  matrix(0,max(dat$comm_idx),max(dat$sp_idx))
+  rownames(out) <- dat %>% distinct(community) %>% pull(community)
+  colnames(out) <- dat %>% distinct(Species) %>% pull(Species)
+  return(out)
+}
+
+raw.out <- make.cont(raw.post)
+mock1.out <- make.cont(mock1.post)
+
+raw.sp   <- data.frame(Species=raw.post %>% distinct(Species) %>% pull(Species))
+raw.comm <- data.frame(community=raw.post %>% distinct(community) %>% pull(community))
+
+mock.sp   <- data.frame(Species=mock1.post %>% distinct(Species) %>% pull(Species))
+mock.comm <- data.frame(community=mock1.post %>% distinct(community) %>% pull(community))
+
+# make true.matrix
+
+true.mat <- result.dat %>% 
+  select(c(Species, community, true.prop)) %>%
+  pivot_wider(values_from = "true.prop", names_from = "Species") %>%
+  as.data.frame() %>%
+  select(!Cycles)
+
+rownames(true.mat) <- true.mat$community
+true.mat <-  true.mat %>% ungroup() %>% dplyr::select(-community)
+
+#####################################################################   
+
+# so i can't get robCompositions to install now so switching to another package... 
+library(coda.base)
+
+# loop over raw
+raw.AD <- data.frame(matrix(0,dim(raw$pars$int_samp_small)[1],nrow(true.mat)))
+colnames(raw.AD) <- rownames(true.mat)
+for(i in 1:dim(raw$pars$int_samp_small)[1]){
+  raw.1 <- raw$pars$int_samp_small[i,,] %>% as.data.frame()
+  rownames(raw.1) <- raw.comm$community 
+  colnames(raw.1) <- raw.sp$Species
+  raw.2 <- raw.1 %>% 
+              filter(rownames(.) %in% result.dat$community)%>%
+              dplyr::select(result.dat$Species) 
+  
+  for(j in 1:nrow(raw.2)){
+    these <- which(true.mat[j,]>0)
+    true <- true.mat[j,these]
+    raw.3 <- raw.2[j,these] / sum(raw.2[j,these])
+    
+    #raw.AD[i,rownames(true.mat)[j]] <-  aDist(true,raw.3)
+    raw.AD[i,rownames(true.mat)[j]] <-  dist(rbind(true,raw.3), method = "aitchison")
+  }
+  #print(i)
+}
+
+# loop over mock1
+mock1.AD <- data.frame(matrix(0,dim(mock1$pars$int_samp_small)[1],nrow(true.mat)))
+colnames(mock1.AD) <- rownames(true.mat)
+for(i in 1:dim(mock1$pars$int_samp_small)[1]){
+  mock.a <- mock1$pars$int_samp_small[i,,] %>% as.data.frame()
+  rownames(mock.a) <- mock.comm$community 
+  colnames(mock.a) <- mock.sp$Species
+  mock.b <- mock.a %>% 
+    filter(rownames(.) %in% result.dat$community)%>%
+    dplyr::select(result.dat$Species) 
+  
+  for(j in 1:nrow(mock.b)){
+    these <- which(true.mat[j,]>0)
+    true <- true.mat[j,these]
+    mock.c <- mock.b[j,these] / sum(mock.b[j,these])
+    
+    #mock1.AD[i,rownames(true.mat)[j]] <-  aDist(true,mock.c)
+    mock1.AD[i,rownames(true.mat)[j]] <-  dist(rbind(true,mock.c), method = "aitchison")
+  }
+  #print(i)
+}
+
+raw.AD$model <- "raw"
+mock1.AD$model <- "mock1"
+
+all.AD <- bind_rows(raw.AD,mock1.AD)
+
+all.AD <- all.AD %>% 
+              pivot_longer(.,-model,
+                           names_to="community",
+                           values_to = "val")
+all.AD.sum <- all.AD %>% group_by(model,community) %>% 
+                summarize(Mean = mean(val),
+                          SD=sd(val),
+                          q.025 = quantile(val,probs=0.025),
+                          q.05 = quantile(val,probs=0.05),
+                          q.25 = quantile(val,probs=0.25),
+                          q.75 = quantile(val,probs=0.75),
+                          q.95 = quantile(val,probs=0.95),
+                          q.975 = quantile(val,probs=0.975))  %>%
+                ungroup() %>%
+                mutate(offset.plot = 0,
+                       offset.plot = ifelse(model=="raw",-0.05,offset.plot)) %>%
+                mutate(Calibration = case_when(model=="raw"~"None",
+                             model=="mock1"~"Mock")) %>%
+                as.data.frame()
+
+all.AD.sum$comm.idx = as.numeric(as.factor(all.AD.sum$community))
+                
+
+
+xBREAKS <- all.AD.sum %>% distinct(comm.idx,community)
+yBREAKS <- c(0,1,2,3,4,5)
+
+col.val <- pal_jco(palette = c("default"), alpha = 1)(10)[c(6,7)]
+
+p_AD <- ggplot(all.AD.sum) + # %>% 
+          geom_errorbar(aes(x=comm.idx + offset.plot,ymin=q.025,ymax=q.975,color=Calibration),width=0) +
+          geom_errorbar(aes(x=comm.idx + offset.plot,ymin=q.25,ymax=q.75,color=Calibration),size=2,width=0) +        
+          geom_point(aes(x=comm.idx + offset.plot,y=Mean,color=Calibration),shape =21,fill="white",size=2) +
+          #scale_y_continuous(NULL,expand=c(0,NA),limits=c(0,NA),breaks=yBREAKS) +
+          #scale_shape_manual(values=c(21,22,24)) +
+          scale_fill_manual(values=col.val,"Community") +
+          scale_color_manual(values=col.val,"Calibration") +
+          scale_x_continuous(NULL,breaks=xBREAKS$comm.idx,labels=xBREAKS$community,limits=c(NA,5.3)) +
+          ylab("Aitchison distance") +
+          theme_classic() +
+          theme(legend.position = c(0.4755,0.85),
+                plot.margin = margin(0,0,0,0.85,"lines"),
+                legend.key.size=unit(0.1,'lines'),
+                legend.text=element_text(size=7),
+                legend.title=element_text(size=9))
+          
+p_AD
+
+
+#ggsave(p_AD, filename = "/home/kimberly.ledger/gadid_metabarcoding/mock_community/mockcom_comparison/gadid_even_aitchison.jpg", width = 6, height = 5, units = "in")
+```

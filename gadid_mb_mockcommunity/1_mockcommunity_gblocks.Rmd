@@ -1,0 +1,270 @@
+---
+title: "analysis of gblock mock community samples"
+author: "Kimberly Ledger"
+date: "2023-10-06"
+output: github_document
+---
+
+okay, so after looking back at my previous analyses of the mock community data (amplicons and gblocks), i'm going to move forward with processing the mock community reads from gBlock on the 20230216 MiSeq run (note: the same exact samples were ran on 20230221, but there are fewer reads there)
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+load libraries
+```{r, warning=FALSE}
+library(tidyverse)
+library(ggplot2)
+```
+
+read in gadid metadata 
+```{r}
+#20230216 has same sample metadata as the run on 20230221 so i'll just use that 
+metadata <- read.csv("/genetics/edna/workdir/gadids/20230221/20230221_gadidmetadata.csv")
+
+#illumina output changed "_" to "-"
+metadata$SampleID <- gsub("_", "-", metadata$SampleID) 
+
+metadata$primer_set[which(metadata$primer_set == "ND1")] <- "S1"
+```
+
+read in all primer set's taxonomic identification tables and samples by asv tables
+```{r}
+taxon_S1 <- read.csv("/genetics/edna/workdir/gadids/20230216/S1_ND1/trimmed/filtered/outputs/asv_taxonomy_blastn.csv", row.names = 1) 
+
+asv_table_S1 <- read.csv("/genetics/edna/workdir/gadids/20230216/S1_ND1/trimmed/filtered/outputs/ASVtable.csv") %>%
+  rename(SampleID = X)
+```
+
+quick aside
+```{r}
+temp <- asv_table_S1[14:34,] %>%
+  pivot_longer(cols = starts_with("ASV"), names_to = "ASV", values_to = "count") %>%
+  filter(count > 0)
+
+temp %>%
+  dplyr::select(ASV) %>%
+  unique()
+```
+
+
+look at the number of ASVs for each species by primer set 
+```{r}
+asvs1 <- taxon_S1 %>%
+  group_by(taxon) %>%
+  summarise(S1_ASVs = n())
+```
+
+now, join taxon and asv table
+```{r}
+#read_summary_S1 <- asv_table_S1 %>%
+#  pivot_longer(cols = starts_with("ASV"), names_to = "ASV", values_to = "count") %>%
+  #filter(count > 0) %>%
+  #filter(taxon != "NA") %>%
+  #group_by(SampleID, ASV) %>%
+  #summarise(total_read_count = sum(count)) %>%
+  #pivot_wider(names_from = "ASV", values_from = "total_read_count") %>%
+  #replace(is.na(.), 0)
+
+read_summary_S1 <- asv_table_S1 %>%
+  pivot_longer(cols = starts_with("ASV"), names_to = "ASV", values_to = "count") %>%
+  filter(count > 0) %>%
+  left_join(taxon_S1, by = "ASV")
+
+read_summary_S1_by_taxon <- read_summary_S1[121:313,] %>% #just check mc samples
+  filter(!is.na(taxon)) %>%
+  dplyr::select(!ASV) %>%
+  group_by(SampleID, taxon) %>%
+  summarize(reads = sum(count))
+```
+
+```{r}
+mock_reads <- read_summary_S1[121:313,] %>%
+  filter(!is.na(taxon))
+
+mock_reads %>%
+  dplyr::select(ASV) %>%
+  unique()
+```
+
+what's mean read depth now? 
+```{r}
+totals <- read_summary_S1_by_taxon %>%
+  group_by(SampleID) %>%
+  summarise(total_reads = sum(reads))
+
+mean(totals$total_reads)
+sum(totals$total_reads)
+```
+
+join to metadata and keep just the mock community reads 
+```{r}
+join <- metadata %>%
+  left_join(read_summary_S1_by_taxon, by = c("SampleID")) %>%
+  filter(Project == "MC") %>%
+  filter(primer_set == "S1")
+
+sum(read_summary_S1_by_taxon$reads)
+
+  
+  pivot_longer(cols = 6:9, names_to = "taxon", values_to = "reads") %>%
+  mutate(reads = ifelse(is.na(reads), 0, reads)) %>%
+  dplyr::select(!Project) %>%
+  dplyr::select(!primer_set)
+
+join_long$shortID<- as.factor(join_long$shortID)
+join_long$replicate <- as.factor(join_long$replicate)
+join_long$taxon <- as.factor(join_long$taxon)
+
+summary(join_long)
+```
+
+let's just plot the data to see how it looks 
+```{r}
+join_long %>%
+  ggplot(aes(x= taxon, y = reads, fill = taxon)) +
+  geom_bar(stat = "identity") + 
+  scale_y_sqrt() +
+  theme_bw() +
+  labs(
+    y = "sequencing reads",
+    x = "taxon",
+    title = "assigned reads") + 
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 0.95),
+    legend.text = element_text(size = 8),
+    legend.key.size = unit(0.3, "cm"),
+    legend.position = "right",
+    legend.title = element_blank()
+  )
+```
+
+```{r }
+join_long %>%
+  group_by(SampleID) %>%
+  mutate(sum=sum(reads)) %>%
+  mutate(prop = reads/sum) %>% 
+  ggplot(aes(x=SampleID, y=prop, fill=taxon)) +
+  geom_bar(stat = "identity") + 
+  theme_bw() +
+  labs(
+    y = "proportion of sequencing reads",
+    x = "sample",
+    title = "mock community") + 
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 0.95),
+    legend.text = element_text(size = 8),
+    legend.key.size = unit(0.3, "cm"),
+    legend.position = "right",
+    legend.title = element_blank()
+  )
+```
+
+
+let's read in metadata for the expected mock communities proportions to use for comparison
+```{r}
+mockc <- read.csv("/genetics/edna/workdir/gadids/20230221/mockcomm_metadata_20230221.csv") %>%
+  rename(prop = Perc_Community) %>%
+  rename(taxon = Species) %>%
+  rename(shortID = Community) %>%
+  mutate(SampleID = "expected") %>%
+  mutate(replicate = 1)
+
+mockc$replicate <- as.factor(mockc$replicate)
+```
+
+
+```{r}
+MC_prop <- join_long %>%
+  group_by(SampleID) %>%
+  mutate(sum=sum(reads)) %>%
+  mutate(prop = reads/sum) %>%
+  dplyr::select(!reads) %>%
+  dplyr::select(!sum)
+
+MC_prop <- mockc %>%
+  bind_rows(MC_prop)
+```
+
+and now let's just plot how the even mock community performed... 
+### even 
+* each species should be ~16.6% 
+```{r even_readnumber}
+join_long %>% 
+  group_by(SampleID) %>%
+  mutate(sum=sum(reads)) %>%
+  mutate(prop = reads/sum) %>%
+  filter(shortID == "even") %>%
+  ggplot(aes(x=SampleID, y=reads, fill=taxon)) +
+  geom_bar(stat = "identity") + 
+  #scale_y_sqrt() +
+  #facet_grid(~primer_set, scales = 'free') +
+  theme_bw() +
+  labs(
+    y = "sequencing reads",
+    x = "sample",
+    title = "Even - number of reads") + 
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 0.95),
+    legend.text = element_text(size = 8),
+    legend.key.size = unit(0.3, "cm"),
+    legend.position = "right",
+    legend.title = element_blank()
+  )
+```
+
+```{r }
+MC_prop %>% 
+  filter(shortID == "even") %>%
+  ggplot(aes(x=SampleID, y=prop, fill=taxon)) +
+  geom_bar(stat = "identity") + 
+  facet_grid(~SampleID, scales = 'free') +
+  theme_bw() +
+  labs(
+    y = "proportion of sequencing reads",
+    x = "sample",
+    title = "Even - proportion of reads") + 
+  theme(
+    axis.text.x=element_blank(),
+    #axis.text.x = element_text(angle = 90, hjust = 0.95),
+    legend.text = element_text(size = 8),
+    legend.key.size = unit(0.3, "cm"),
+    legend.position = "right",
+    legend.title = element_blank()
+  )
+```
+
+okay, so there is some primer bias. let's move on. 
+to use code from Shelton et al. I need to reformat some of this data
+i am using the same col names (expect for changing ID_mifish to ID_gadid)
+and adding a column for primer_set 
+```{r}
+for_est <- join_long %>% 
+  rename(ID_gadid = taxon) %>%
+  rename(community = shortID) %>%
+  rename(nReads = reads) %>%
+  rename(tech_rep = replicate) %>%
+  select(!SampleID)
+
+my_mc <- read.csv("/genetics/edna/workdir/gadids/20230111/mockcomm_metadata.csv") %>%
+  select(!Common_name) %>%
+  select(!Perc_Community) %>%
+  rename(ID_gadid = Species) %>%
+  rename(community = Community) %>%
+  mutate(community = ifelse(community == "E", "even", community)) %>%
+   mutate(community = ifelse(community == "N1", "north1", community)) %>%
+   mutate(community = ifelse(community == "N2", "north2", community)) %>%
+   mutate(community = ifelse(community == "S1", "south1", community)) %>%
+   mutate(community = ifelse(community == "S2", "south2", community)) %>%
+   mutate(community = ifelse(community == "M1", "middle", community))
+
+my_out <- for_est %>%
+  left_join(my_mc) %>%
+  mutate(start_conc_ng = DNA_Ratio*5*4) %>%
+  select(!DNA_Ratio) %>%
+  mutate(Cycles = 35) %>%
+  filter(community != "NC")
+
+#write.csv(my_out, "gadid_mock_community_data_20231009.csv")
+```
