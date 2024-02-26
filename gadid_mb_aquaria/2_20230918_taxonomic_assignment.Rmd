@@ -1,0 +1,102 @@
+---
+title: "determine taxonomic assignments for asvs"
+author: "Kimberly Ledger"
+date: "2023-09-22"
+output: github_document
+---
+
+- analysis of gadid sequences from 20230918 sequencing run    
+- this script uses decontaminated read counts from my 20230922 run of the "1_ASV_decontamination.Rmd" 
+- this script uses the blastn taxonomic id's using the script "blastn_taxonomy.Rmd" from eDNA_metabarcoding - file was saved here: "/genetics/edna/workdir/gadids/20230918_aquaria/trimmed/filtered/outputs/asv_taxonomy_blastn.csv"
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+load libraries
+```{r, warning=FALSE}
+library(tidyverse)
+```
+
+
+read in decontaminated sample table
+```{r}
+decontam_reads <- read.csv("/home/kimberly.ledger/gadid_aquaria/gadid_mb_aquaria/20230918_decontamination_output_20231030.csv") %>%
+  #select(!sample_type) %>%   ## clean-up this table - remove irrelevant columns 
+  dplyr::select(!loc.asv)
+
+# of replicates
+totals <- decontam_reads %>%
+  group_by(Sample_ID) %>%
+  summarize(total = sum(reads))
+mean(totals$total)
+
+asv_summary <- decontam_reads %>%
+  group_by(ASV) %>%
+  summarize(reads = sum(reads)) %>%
+  arrange(desc(reads))
+```
+
+read in the taxonomic id's 
+```{r}
+taxon_blastn <- read.csv("/genetics/edna/workdir/gadids/20230918_aquaria/trimmed/filtered/outputs/asv_taxonomy_blastn.csv") %>%
+  dplyr::select(!X)
+```
+
+
+join the taxon id's to the ASVs in the decontaminated read dataset 
+```{r}
+my_asvs <- asv_summary$ASV
+
+decontam_asvs <- taxon_blastn %>%
+  filter(ASV %in% my_asvs)
+```
+
+**hmm still some saffron cod (the positive control) asvs... 
+
+checked the asvs with missing taxon assignments
+ASV16 = 96.8% G. macrocephalus
+ASV16 = 96.4% B. saida
+ASV19 – should be G. macrocephalus
+ASV20 – should be G. chalcogrammus
+ASV22 = 96.4% B. saida (lots of individuals)
+ASV22 =  96.4% G. macro (1 individual)
+ASV27 – should be G. chalcogrammus
+ASV92 = 96.4% G. morhua
+
+
+need to manually add ID for a few ASVs
+```{r}
+decontam_asvs[34,] <- c("ASV19", "Gadus macrocephalus", "species")
+decontam_asvs[35,] <- c("ASV20", "Gadus chalcogrammus", "species")
+decontam_asvs[36,] <- c("ASV27", "Gadus chalcogrammus", "species")
+```
+
+
+```{r}
+join <- decontam_reads %>%
+  left_join(decontam_asvs, by = "ASV") %>%
+  filter(!is.na(taxon)) %>% 
+  group_by(Sample_ID, sample_type, extraction_ID, pcr_replicate, alt_ID, tank_ID, taxon) %>%
+  summarize(total_reads = sum(reads)) %>%
+  mutate(MiSeq_run = "A")
+```
+
+output reads with taxonomic ID table
+```{r}
+#write.csv(join, "/home/kimberly.ledger/gadid_aquaria/gadid_mb_aquaria/20230918_taxon_reads.csv")
+```
+
+```{r}
+sum(join$total_reads)
+
+length(unique(join$Sample_ID))
+length(unique(join$taxon))
+```
+
+```{r}
+totals <- join %>%
+  group_by(Sample_ID) %>%
+  summarize(total = sum(total_reads))
+mean(totals$total)
+```

@@ -1,0 +1,641 @@
+---
+title: "Metabarcoding aquarium plots"
+author: "Kimberly Ledger"
+date: "2024-01-18"
+output: html_document
+---
+
+this code is just a cleaned up version of the "7_mb_estimates_v_truth.Rmd" plus some more exploration with individual biomass 
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+select <- dplyr::select
+```
+
+read in tank estimates
+```{r}
+tanks_long <- read.csv("/home/kimberly.ledger/gadid_aquaria/gadid_mb_aquaria/tank_mock_estimates.csv") %>%
+  mutate(Species = ifelse(Species == "Boreogadus saida", "AC", Species),
+         Species = ifelse(Species == "Gadus chalcogrammus", "WP", Species),
+         Species = ifelse(Species == "Gadus macrocephalus", "PC", Species))
+```
+
+read in tank metadata 
+```{r}
+metadata <-  read.csv("/home/kimberly.ledger/gadid_aquaria/gadid_mb_aquaria/TankData_MBmodified.csv") %>% 
+  filter(groupID != "T") %>%  #remove tap water controls
+  select(!sampleID) %>% #remove sample id because estimates are at the tank-level
+  unique() %>%
+  rename(tank_ID = groupID)
+```
+
+join - this removes the few T tanks with eDNA reads. okay for now but will need to report those somewhere... 
+```{r}
+all_long <- metadata %>%
+  pivot_longer(cols = c(19:21), names_to = "Species", values_to = "Fbiomass") %>%
+  mutate(Species = str_remove(Species, "_Fbiomass")) %>%
+  left_join(tanks_long, by = c("tank_ID", "Species"))
+```
+
+calculate abundance 
+```{r}
+all_long_abundance <- metadata %>%
+  mutate(AC_N = ifelse(is.na(AC_N), 0, AC_N), 
+         PC_N = ifelse(is.na(PC_N), 0, PC_N),
+         WP_N = ifelse(is.na(WP_N), 0, WP_N),
+         Tot_N = AC_N + PC_N + WP_N,
+         AC_FN = AC_N/Tot_N,
+         PC_FN = PC_N/Tot_N,
+         WP_FN = WP_N/Tot_N) %>%
+  pivot_longer(cols = c(33:35), names_to = "Species", values_to = "F_Abundance") %>%
+  mutate(Species = str_remove(Species, "_FN")) %>%
+  mutate(F_Abundance = ifelse(is.na(F_Abundance), 0, F_Abundance)) %>%
+  left_join(tanks_long, by = c("tank_ID", "Species"))
+```
+
+
+plot biomass and color by species - only including samples with fish present 
+```{r}
+mypal <- c("#6a6599", "#79af97", "#00a1d5")   #purple, green, blue
+
+fig_biomass <- all_long %>%
+  filter(n.tank.dissim != "2") %>%
+  filter(Fish_pres == "1") %>%
+  mutate(Species = ifelse(Species == "AC", "Arctic cod", Species)) %>%
+  mutate(Species = ifelse(Species == "PC", "Pacific cod", Species)) %>%
+  mutate(Species = ifelse(Species == "WP", "Walleye pollock", Species)) %>%
+  ggplot() + 
+  geom_errorbar(aes(x=Fbiomass,ymin=q.025,ymax=q.975,color=Species),width=0, size = .5) +
+  geom_point(aes(x=Fbiomass,y=Mean,color=Species), size = 2) +
+  #geom_smooth(aes(x=Fbiomass,y=Mean,color=Species), method = "lm", se = FALSE) +
+  geom_smooth(aes(x=Fbiomass,y=Mean), color = "black", linetype = "dashed", method = "lm", se = FALSE) +
+  scale_color_manual(values = mypal) + 
+  theme_classic() + 
+  labs(x = "proportional biomass",
+       y = "eDNA read proportion") +
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 14),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 14))
+fig_biomass
+```
+
+```{r}
+#ggsave("read_biomass.png", plot = fig_biomass, width = 8.5, height = 6, dpi = 300)
+```
+
+
+plot abundance 
+```{r}
+fig_abund <- all_long_abundance %>%
+  filter(n.tank.dissim != "2") %>%
+  filter(Fish_pres == "1") %>%
+  mutate(Species = ifelse(Species == "AC", "Arctic cod", Species)) %>%
+  mutate(Species = ifelse(Species == "PC", "Pacific cod", Species)) %>%
+  mutate(Species = ifelse(Species == "WP", "Walleye pollock", Species)) %>%
+  ggplot() + 
+  geom_errorbar(aes(x=F_Abundance,ymin=q.025,ymax=q.975,color=Species),width=0, size = 0.5) +
+  geom_point(aes(x=F_Abundance,y=Mean,color=Species), size = 2) +
+  #geom_smooth(aes(x=F_Abundance,y=Mean,color=Species,fill=Species), method = "lm", se = FALSE, alpha = 0.5) +
+  geom_smooth(aes(x=F_Abundance,y=Mean), color = "black", linetype = "dashed",method = "lm", se = FALSE) +
+  scale_color_manual(values = mypal) + 
+  theme_classic() + 
+  labs(x = "proportional abundance",
+       y = "eDNA read proportion") +
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 14),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 14))
+fig_abund
+```
+
+```{r}
+#ggsave("read_abund.png", plot = fig_abund, width = 8.5, height = 6, dpi = 300)
+```
+
+
+put together into one plot 
+```{r, fig.width=10, fig.height=4}
+library(patchwork)
+
+combined_fig <- fig_biomass + fig_abund + plot_layout(guides = 'collect') + plot_annotation(tag_levels = 'A') &
+    theme(plot.tag = element_text(face = 'bold'))
+combined_fig
+```
+
+```{r}
+#ggsave("biomass_abund.png", plot = combined_fig, width = 10, height = 4, dpi = 300)
+```
+
+
+linear regression with all species 
+```{r}
+all_long_for_mod <- all_long %>%
+  filter(n.tank.dissim != "2") %>%
+  filter(Fish_pres == "1")
+
+mod_all_biomass <- lm(Fbiomass ~ Mean, data = all_long_for_mod)
+summary(mod_all_biomass)
+
+all_long_abund_for_mod <- all_long_abundance %>%
+  filter(n.tank.dissim != "2") %>%
+  filter(Fish_pres == "1")
+
+mod_all_N <- lm(F_Abundance ~ Mean, data = all_long_abund_for_mod)
+summary(mod_all_N)
+```
+
+
+calculate and plot BIOMASS residuals
+```{r}
+residuals_biomass <- residuals(mod_all_biomass)
+all_long_for_mod$residuals_biomass <- residuals_biomass
+
+# Find indices of points with largest residuals
+n_points <- 6  # Change this to the number of points you want to highlight
+indices_of_largest_residuals <- order(abs(residuals_biomass), decreasing = TRUE)[1:n_points]
+
+# Plot the scatter plot
+plot(x = all_long_for_mod$Fbiomass, y = all_long_for_mod$Mean, main = "Scatter Plot with Line of Best Fit", xlab = "x", ylab = "y")
+abline(mod_all_biomass, col = "red")  # Plot the line of best fit
+
+# Highlight points with largest residuals
+points(all_long_for_mod$Fbiomass[indices_of_largest_residuals], all_long_for_mod$Mean[indices_of_largest_residuals], col = "green", pch = 16)
+```
+
+```{r}
+hist(residuals_biomass)
+
+normparams <- MASS::fitdistr(residuals_biomass, "normal")$estimate                                      
+probs <- pnorm(residuals_biomass, normparams[1], normparams[2])
+outliers <- which(probs < 0.025 | probs > 0.975)
+
+outlier_tanks <- all_long_abund_for_mod$tank_ID[outliers]
+outlier_tanks
+```
+
+look at the details of the outlier tanks
+```{r}
+all_long %>%
+  filter(tank_ID == 80)
+```
+
+
+since one of our objectives was to see how well the assay performed when species proportions were low vs middle vs high, let's look closer at that for the biomass model 
+
+```{r}
+biomass_resid_fig <- all_long_for_mod %>%
+  mutate(Species = ifelse(Species == "AC", "Arctic cod", Species)) %>%
+  mutate(Species = ifelse(Species == "PC", "Pacific cod", Species)) %>%
+  mutate(Species = ifelse(Species == "WP", "Walleye pollock", Species)) %>%
+  ggplot(aes(x = Fbiomass, y = residuals_biomass, color = Species)) +
+  geom_point() +
+  geom_smooth(aes(x=Fbiomass,y=residuals_biomass), color = "black", linetype = "dashed",method = "lm", se = TRUE) +
+  scale_color_manual(values = mypal) + 
+  geom_abline(intercept = 0, slope = 0, linetype = "dashed", color = "black")  + 
+  theme_classic() +
+  labs(x = "proportional biomass",
+       y = "biomass model residuals") +
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 14),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 14))
+
+biomass_resid_fig
+```     
+
+** okay so a negative residual means there were more eDNA reads than true fish, and a positive residual means there was few reads than true fish 
+** the most negative WP was a false positive detection in a take that should have been all AC.... 
+
+```{r}
+abs_biomass_resid_fig <- all_long_for_mod %>%
+  mutate(Species = ifelse(Species == "AC", "Arctic cod", Species)) %>%
+  mutate(Species = ifelse(Species == "PC", "Pacific cod", Species)) %>%
+  mutate(Species = ifelse(Species == "WP", "Walleye pollock", Species)) %>%
+  ggplot(aes(x = Fbiomass, y = abs(residuals_biomass), color = Species)) +
+  geom_point() +
+  geom_smooth(aes(x=Fbiomass,y= abs(residuals_biomass)), color = "black", linetype = "dashed",method = "lm", se = TRUE) +
+  scale_color_manual(values = mypal) + 
+  #geom_abline(intercept = 0, slope = 0, linetype = "dashed", color = "black")  + 
+  theme_classic() +
+  labs(x = "proportional biomass",
+       y = "abs(biomass model residuals)") +
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 14),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 14))
+
+abs_biomass_resid_fig
+```     
+
+
+```{r}
+#ggsave("biomass_residuals.png", plot = biomass_resid_fig, width = 8.5, height = 6, dpi = 300)
+#ggsave("abs_biomass_residuals.png", plot = abs_biomass_resid_fig, width = 8.5, height = 6, dpi = 300)
+```
+
+
+try to zoom in on the rare things
+```{r}
+fig_biomass_rare <- all_long %>%
+  filter(n.tank.dissim != "2") %>%
+  filter(Fish_pres == "1") %>%
+  mutate(Species = ifelse(Species == "AC", "Arctic cod", Species)) %>%
+  mutate(Species = ifelse(Species == "PC", "Pacific cod", Species)) %>%
+  mutate(Species = ifelse(Species == "WP", "Walleye pollock", Species)) %>%
+  filter(Fbiomass != 0 & Fbiomass <= 0.25) %>%
+  ggplot() + 
+  geom_errorbar(aes(x=Fbiomass,ymin=q.025,ymax=q.975,color=Species),width=0, size = .5) +
+  geom_point(aes(x=Fbiomass,y=Mean,color=Species), size = 2) +
+  #geom_smooth(aes(x=Fbiomass,y=Mean,color=Species), method = "lm", se = FALSE) +
+  #geom_smooth(aes(x=Fbiomass,y=Mean), color = "black", linetype = "dashed", method = "lm", se = FALSE) +
+  xlim(c(0, 0.6)) + 
+  ylim(c(0, 0.6)) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "black")  + 
+  scale_color_manual(values = mypal) + 
+  theme_classic() + 
+  labs(x = "proportional biomass",
+       y = "eDNA read proportion") +
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 14),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 14))
+fig_biomass_rare
+```
+
+
+make individual plots for each species on their own - using 1:1 line 
+```{r}
+fig_abund_PC_age <- all_long_abundance %>%
+  filter(n.tank.dissim != "2") %>%
+  filter(Fish_pres == "1") %>%
+  mutate(Species = ifelse(Species == "AC", "Arctic cod", Species)) %>%
+  mutate(Species = ifelse(Species == "PC", "Pacific cod", Species)) %>%
+  mutate(Species = ifelse(Species == "WP", "Walleye pollock", Species)) %>%
+  filter(Species == "Pacific cod") %>%
+  ggplot() + 
+  geom_errorbar(aes(x=F_Abundance,ymin=q.025,ymax=q.975,color=PC_age),width=0) +
+  geom_point(aes(x=F_Abundance,y=Mean,color=PC_age), size = 3) + 
+  #geom_errorbar(aes(x=F_Abundance,ymin=q.025,ymax=q.975,color=Species),width=0, size = 0.5) +
+  #geom_point(aes(x=F_Abundance,y=Mean,color=Species), size = 3) +
+  #geom_smooth(aes(x=F_Abundance,y=Mean,color=Species,fill=Species), method = "lm", se = FALSE, alpha = 0.5) +
+  #geom_smooth(aes(x=F_Abundance,y=Mean), color = "black", linetype = "dashed",method = "lm", se = FALSE) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "black")  + 
+  scale_color_material("green") + 
+  #scale_color_manual(values = "#79af97") +   #"#6a6599", "#79af97", "#00a1d5")   #purple, green, blue
+  theme_classic() + 
+  labs(x = "proportional abundance",
+       y = "eDNA read proportion",
+       color = "Pacific cod age") +
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 14),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 14))
+fig_abund_PC_age
+```
+
+```{r}
+#ggsave("figures/read_abund_PC_age.png", plot = fig_abund_PC_age, width = 8.5, height = 6, dpi = 300)
+```
+
+
+plot abundance - with biomass scale 
+```{r}
+temp <- all_long_abundance %>%
+  filter(n.tank.dissim != "2") %>%
+  filter(Fish_pres == "1") %>%
+  mutate(AC_grams_per_N = AC_biomass/AC_N) %>%
+  mutate(PC_grams_per_N = PC_biomass/PC_N) %>%
+  mutate(WP_grams_per_N = WP_biomass/WP_N) %>%
+  select(F_Abundance, Mean, q.025, q.975, Species, AC_grams_per_N, PC_grams_per_N, WP_grams_per_N) %>%
+  filter(F_Abundance > 0) %>%
+  pivot_longer(cols = c(6:8), values_to = "biomass_per_N") %>%
+  mutate(name = ifelse(name == "AC_grams_per_N", "AC", name)) %>%
+  mutate(name = ifelse(name == "PC_grams_per_N", "PC", name)) %>%
+  mutate(name = ifelse(name == "WP_grams_per_N", "WP", name)) %>%
+  filter(Species == name) %>%
+  select(!name)
+  
+fig_abund_w_ind_biomass <- temp %>%  
+  mutate(Species = ifelse(Species == "AC", "Arctic cod", Species)) %>%
+  mutate(Species = ifelse(Species == "PC", "Pacific cod", Species)) %>%
+  mutate(Species = ifelse(Species == "WP", "Walleye pollock", Species)) %>%
+  filter(Species == "Pacific cod") %>%
+  ggplot() + 
+  geom_errorbar(aes(x=F_Abundance,ymin=q.025,ymax=q.975,color=Species),width=0, size = 0.5) +
+  geom_point(aes(x=F_Abundance,y=Mean,color=Species, fill=biomass_per_N), shape = 21, size = 3, stroke = 1.5) +
+  #geom_smooth(aes(x=F_Abundance,y=Mean), color = "black", linetype = "dashed",method = "lm", se = FALSE) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "black")  + 
+  scale_color_manual(values = mypal) + 
+  #scale_fill_continuous(low = "white", high = "black", trans = "log10") +  # Apply log transformation to fill scale
+  scale_fill_continuous(low = "white", high = "black", trans = "sqrt") +  # Apply log transformation to fill scale
+  theme_classic() + 
+  labs(x = "proportional abundance",
+       y = "eDNA read proportion",
+       fill = "grams per individual") +
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 14),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 14))
+fig_abund_w_ind_biomass
+```
+
+```{r}
+ggsave("figures/read_abund_PCOD_biomass.png", plot = fig_abund_w_ind_biomass, width = 8.5, height = 6, dpi = 300)
+```
+
+
+
+
+
+
+
+
+now explore the relationship between mass and the read proportion v abundance proportion residuals 
+
+having to run code from "10_estimtes_v_truth" scripts because i don't know why i cant get things to work...
+
+read in tank estimates
+```{r}
+tanks <- read.csv("/home/kimberly.ledger/gadid_metabarcoding/aquaria_DBO/tank_mock_estimates.csv") %>%
+  mutate(Species = ifelse(Species == "Boreogadus saida", "AC", Species),
+         Species = ifelse(Species == "Gadus chalcogrammus", "WP", Species),
+         Species = ifelse(Species == "Gadus macrocephalus", "PC", Species)) %>%
+  pivot_wider(names_from = Species, values_from = c(6:9))
+```
+
+read in tank metadata 
+```{r}
+metadata <-  read.csv("/home/kimberly.ledger/gadid_metabarcoding/aquaria_DBO/TankData_MBmodified.csv") %>% 
+  filter(groupID != "T") %>%  #remove tap water controls
+  select(!sampleID) %>% #remove sample id because estimates are at the tank-level
+  unique() %>%
+  rename(tank_ID = groupID)
+```
+
+join - this removes the few T tanks with eDNA reads. okay for now but will need to report those somewhere... 
+```{r}
+all <- metadata %>%
+  left_join(tanks, by = "tank_ID")
+```
+
+```{r}
+all$n.tank.dissim <- as.factor(all$n.tank.dissim)
+all$n.sample.dissim <- as.factor(all$n.sample.dissim)
+```
+
+```{r}
+all <- all %>%
+  mutate(AC_N = ifelse(is.na(AC_N), 0, AC_N), 
+         PC_N = ifelse(is.na(PC_N), 0, PC_N),
+         WP_N = ifelse(is.na(WP_N), 0, WP_N),
+         Tot_N = AC_N + PC_N + WP_N,
+         AC_FN = AC_N/Tot_N,
+         PC_FN = PC_N/Tot_N,
+         WP_FN = WP_N/Tot_N)
+```
+
+compute the perpendicular distance of each point to the line
+```{r}
+dist_data <- all %>%
+  filter(n.tank.dissim != "2") %>%
+  filter(Fish_pres == "1") %>%
+  mutate(AC_grams_per_N = AC_biomass/AC_N) %>%
+  mutate(PC_grams_per_N = PC_biomass/PC_N) %>%
+  mutate(WP_grams_per_N = WP_biomass/WP_N)
+
+# Calculate distances from points to the 1:1 line
+dist_data$PC_distances_abundance <- dist_data$Mean_PC - dist_data$PC_FN
+dist_data$PC_distances_biomass <- dist_data$Mean_PC - dist_data$PC_Fbiomass
+dist_data$AC_distances_abundance <- dist_data$Mean_AC - dist_data$AC_FN
+dist_data$AC_distances_biomass <- dist_data$Mean_AC - dist_data$AC_Fbiomass
+dist_data$WP_distances_abundance <- dist_data$Mean_WP - dist_data$WP_FN
+dist_data$WP_distances_biomass <- dist_data$Mean_WP - dist_data$WP_Fbiomass
+
+#dist_data <- dist_data %>%
+#  filter(!is.na(PC_age))
+dist_data
+```
+
+```{r}
+dist_data <- dist_data %>%
+  mutate(PC_age_group = ifelse(PC_age == 0, "age 0", NA),
+         PC_age_group = ifelse(PC_age == 1, "age 1", PC_age_group),
+         PC_age_group = ifelse(PC_age == 1.5, "age 1", PC_age_group),
+         PC_age_group = ifelse(PC_age == 2, "age 2", PC_age_group),
+         PC_age_group = ifelse(PC_age == 7, "age 7", PC_age_group))
+```
+
+```{r}
+pc_residual_abund <- ggplot(dist_data, aes(y = PC_age_group, x = PC_distances_abundance, fill = PC_age)) + 
+  geom_point(shape = 21, cex = 2) + 
+  theme_bw() + 
+  scale_fill_material("green") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black") +
+  labs(x = "residual (abundance)",
+       y = "Pacific cod age") +
+  theme(legend.position = "none")+
+  xlim(c(-0.5,0.5))
+pc_residual_abund
+```
+
+```{r}
+pc_residual_biomass <- ggplot(dist_data, aes(y = PC_age_group, x = PC_distances_biomass, fill = PC_age)) + 
+  geom_point(shape = 21, cex = 2) + 
+  theme_bw() + 
+  scale_fill_material("green") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black") +
+  labs(x = "residual (biomass)",
+       y = "Pacific cod age") +
+  theme(legend.position = "none") +
+  xlim(c(-0.5,0.5))
+pc_residual_biomass
+```
+
+```{r}
+pc_residual_abund <- ggplot(dist_data, aes(y = PC_grams_per_N, x = PC_distances_abundance, fill = PC_age)) + 
+  geom_point(shape = 21, cex = 2) + 
+  theme_bw() + 
+  scale_fill_material("green") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black") +
+  labs(x = "residual (abundance)",
+       y = "Pacific cod Body Weight") +
+  theme(legend.position = "none")+
+  xlim(c(-0.5,0.5))
+pc_residual_abund
+```
+
+```{r}
+ac_residual_abund <- ggplot(dist_data, aes(y = AC_grams_per_N, x = AC_distances_abundance, fill = AC_age)) + 
+  geom_point(shape = 21, cex = 2) + 
+  theme_bw() + 
+  scale_fill_material("purple") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black") +
+  labs(x = "residual (abundance)",
+       y = "Arctic cod age") +
+  theme(legend.position = "none")+
+  xlim(c(-0.5,0.5))
+ac_residual_abund
+```
+
+```{r}
+wp_residual_abund <- ggplot(dist_data, aes(y = WP_grams_per_N, x = WP_distances_abundance, fill = WP_age)) + 
+  geom_point(shape = 21, cex = 2) + 
+  theme_bw() + 
+  scale_fill_material("blue") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black") +
+  labs(x = "residual (abundance)",
+       y = "Walleye pollock") +
+  theme(legend.position = "none")+
+  xlim(c(-0.5,0.5))
+wp_residual_abund
+```
+
+
+figure out how to plot all species abundance residuals by body weight  -
+maybe i only want to plot tanks with multiples sizes??? 
+
+```{r}
+write.csv(dist_data, "dist_test_output.csv") 
+
+temp <- dist_data %>%
+  select(AC_age) %>%
+  select(PC_age) %>%
+  select(PC_age_group) %>%
+  select(WP_age) %>%
+  select(AC_distances_abundance) %>%
+  select(AC_distances_biomass) %>%
+  select(PC_distances_abundance) %>%
+  select(PC_distances_biomass) %>%
+  select(WP_distances_abundance) %>%
+  select(WP_distances_biomass) %>%
+  select(AC_grams_per_N) %>%
+  select(PC_grams_per_N) %>%
+  select(WP_grams_per_N)
+
+```
+
+
+
+
+
+
+
+```{r}
+ggplot(dist_data,aes(x = distances, fill = PC_age)) + 
+  geom_histogram(binwidth = 0.1, aes(group = PC_age)) + 
+  theme_bw() + 
+  scale_fill_material("green")
+```
+
+think of other ways to represent this 
+
+calculate abundance residuals for all species (not real residuals from the model, but distance from true 1:1 ratio)
+```{r}
+temp <- all_long_abund_for_mod %>%
+  filter(F_Abundance > 0) %>%
+  mutate(dist_abund = Mean - F_Abundance) %>%
+  mutate(AC_grams_per_N = AC_biomass/AC_N) %>%
+  mutate(PC_grams_per_N = PC_biomass/PC_N) %>%
+  mutate(WP_grams_per_N = WP_biomass/WP_N)
+```
+
+```{r}
+pc_residual_abund <- temp %>%
+  filter(!is.na(PC_age)) %>%
+  ggplot(aes(y = PC_age, x = dist_abund, fill = PC_age)) + 
+  geom_point(shape = 21, cex = 2) + 
+  theme_bw() + 
+  scale_fill_material("green") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black") +
+  labs(x = "residual (abundance)",
+       y = "Pacific cod body weight") +
+  theme(legend.position = "none")+
+  xlim(c(-0.5,0.5))
+pc_residual_abund
+```
+
+
+
+
+compute the perpendicular distance of each point to the line
+
+```{r}
+# Calculate distances from points to the 1:1 line
+dist_data$distances_abundance <- dist_data$Mean_PC - dist_data$PC_FN
+dist_data$distances_biomass <- dist_data$Mean_PC - dist_data$PC_Fbiomass
+
+dist_data <- dist_data %>%
+  filter(!is.na(PC_age))
+```
+
+```{r}
+ggplot(dist_data,aes(x = distances, fill = PC_age)) + 
+  geom_histogram(binwidth = 0.1, aes(group = PC_age)) + 
+  theme_bw() + 
+  scale_fill_material("green")
+```
+
+think of other ways to represent this 
+
+```{r}
+dist_data <- dist_data %>%
+  mutate(PC_age_group = ifelse(PC_age == 0, "age 0", NA),
+         PC_age_group = ifelse(PC_age == 1, "age 1", PC_age_group),
+         PC_age_group = ifelse(PC_age == 1.5, "age 1", PC_age_group),
+         PC_age_group = ifelse(PC_age == 2, "age 2", PC_age_group),
+         PC_age_group = ifelse(PC_age == 7, "age 7", PC_age_group))
+```
+
+```{r}
+pc_residual_abund <- ggplot(dist_data, aes(y = PC_age_group, x = distances_abundance, fill = PC_age)) + 
+  geom_point(shape = 21, cex = 2) + 
+  theme_bw() + 
+  scale_fill_material("green") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black") +
+  labs(x = "residual (abundance)",
+       y = "Pacific cod age") +
+  theme(legend.position = "none")+
+  xlim(c(-0.5,0.5))
+pc_residual_abund
+```
+
+
+
+```{r}
+temp <- all_long_abundance %>%
+  filter(n.tank.dissim != "2") %>%
+  filter(Fish_pres == "1") %>%
+  mutate(Species = ifelse(Species == "AC", "Arctic cod", Species)) %>%
+  mutate(Species = ifelse(Species == "PC", "Pacific cod", Species)) %>%
+  mutate(Species = ifelse(Species == "WP", "Walleye pollock", Species)) %>%
+  mutate(AC_grams_per_N = AC_biomass/AC_N) %>%
+  mutate(PC_grams_per_N = PC_biomass/PC_N) %>%
+  mutate(WP_grams_per_N = WP_biomass/WP_N) %>%
+  
+  
+  ggplot() + 
+  geom_errorbar(aes(x=F_Abundance,ymin=q.025,ymax=q.975,color=PC_age),width=0) +
+  geom_point(aes(x=F_Abundance,y=Mean,color=PC_age), size = 3) + 
+  #geom_errorbar(aes(x=F_Abundance,ymin=q.025,ymax=q.975,color=Species),width=0, size = 0.5) +
+  #geom_point(aes(x=F_Abundance,y=Mean,color=Species), size = 3) +
+  #geom_smooth(aes(x=F_Abundance,y=Mean,color=Species,fill=Species), method = "lm", se = FALSE, alpha = 0.5) +
+  #geom_smooth(aes(x=F_Abundance,y=Mean), color = "black", linetype = "dashed",method = "lm", se = FALSE) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "black")  + 
+  scale_color_material("green") + 
+  #scale_color_manual(values = "#79af97") +   #"#6a6599", "#79af97", "#00a1d5")   #purple, green, blue
+  theme_classic() + 
+  labs(x = "proportional abundance",
+       y = "eDNA read proportion",
+       color = "Pacific cod age") +
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 14),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 14))
+
+```
+
+
+
+

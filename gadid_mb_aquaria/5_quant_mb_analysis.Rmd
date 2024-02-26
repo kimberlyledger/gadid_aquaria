@@ -1,0 +1,505 @@
+---
+title: "a look at the quantitative metabarcoding results - aquaria samples"
+author: "Kimberly Ledger"
+date: "2023-10-06"
+output: html_document
+---
+
+load libraries
+```{r}
+library(tidyverse)
+library(data.table)
+library(gridExtra)
+library(ggsci)
+select <- dplyr::select
+```
+
+# Read in the stan model outputs 
+```{r}
+load("/home/kimberly.ledger/gadid_aquaria/gadid_mb_aquaria/quant_mb_outputs/raw_20231101.Rdata")
+raw <- Output
+load("/home/kimberly.ledger/gadid_aquaria/gadid_mb_aquaria/quant_mb_outputs/mock_20231102.Rdata")
+mock1 <- Output 
+```
+
+```{r}
+#########################################################
+# Raw estimates from Reads
+#########################################################
+# summarize raw estimates from reads for each species.
+raw.raw <- raw$env %>% 
+  group_by(community,Cycles,tech_rep) %>%
+  mutate(sum.ng = sum(start_conc_ng),
+         true.prop = start_conc_ng / sum.ng) %>%
+  ungroup() %>%
+  group_by(Species,community,Cycles,true.prop) %>%
+  group_by(Species,community,Cycles) %>%
+  summarize(simple.Mean=mean(propReads),
+            simple.N = length(tech_rep)) %>%
+  replace_na(list(raw.Mean=0,raw.SD=0,raw.SE=0))
+
+# extract predicted proportions from the posterior
+COM <- data.frame(community = levels(raw$env$community %>% as.factor()))
+COM$comm_idx <- 1:nrow(COM)
+SP  <- raw$env %>% distinct(Species,sp_idx) %>% as.data.frame()
+
+# These are the predicted intercepts for the posteriors
+beta_posterior <- raw$stanMod_summary[["int_samp_small"]][, c(1,4:8)]
+colnames(beta_posterior) <- paste0("raw.",substr(colnames(beta_posterior),1,nchar(colnames(beta_posterior))-1))
+colnames(beta_posterior)[1] <- "raw.mean"
+beta_posterior <- as.data.frame(beta_posterior)
+
+raw.post <-expand.grid(comm_idx = COM$comm_idx,sp_idx =SP$sp_idx) %>% 
+  arrange(comm_idx,sp_idx) %>% 
+  left_join(.,COM) %>% 
+  left_join(.,SP) %>% 
+  bind_cols(.,beta_posterior)
+
+# Combine the raw estimates and posterior estimates
+raw.all <- full_join(raw.raw,raw.post)
+```
+
+```{r}
+#########################################################
+# Mock1
+#########################################################
+# summarize raw estimates from reads for each species.
+mock1.raw <- mock1$env %>% group_by(community,Cycles,tech_rep) %>%
+      mutate(sum.ng = sum(start_conc_ng),
+             true.prop = start_conc_ng / sum.ng) %>%
+      ungroup() %>%
+      group_by(Species,community,Cycles,true.prop) %>%
+  summarize(simple.Mean=mean(propReads),
+            simple.N = length(tech_rep)) %>%
+  replace_na(list(raw.Mean=0,raw.SD=0,raw.SE=0))
+
+# extract predicted proportions from the posterior
+COM <- data.frame(community = levels(mock1$env$community %>% as.factor()))
+COM$comm_idx <- 1:nrow(COM)
+SP  <- mock1$env %>% distinct(Species,sp_idx) %>% as.data.frame()
+
+# These are the predicted intercepts for the posteriors
+beta_posterior <- mock1$stanMod_summary[["int_samp_small"]][, c(1,4:8)]
+colnames(beta_posterior) <- paste0("mock1.",substr(colnames(beta_posterior),1,nchar(colnames(beta_posterior))-1))
+colnames(beta_posterior)[1] <- "mock1.mean"
+beta_posterior <- as.data.frame(beta_posterior)
+
+mock1.post <-expand.grid(comm_idx = COM$comm_idx,sp_idx =SP$sp_idx) %>% 
+    arrange(comm_idx,sp_idx) %>% 
+    left_join(.,COM) %>% 
+    left_join(.,SP) %>% 
+    bind_cols(.,beta_posterior)
+
+# Combine the raw estimates and posterior estimates
+mock1.all <- full_join(mock1.raw,mock1.post)
+```
+
+```{r}
+# Combine mock results with raw reads.
+result.dat <- left_join(mock1.all,raw.all) %>%
+  filter(Species != "Arctogadus glacialis") %>%   #remove species that are not in tanks 
+  filter(Species != "Eleginus gracilis") %>%
+  filter(Species != "Microgadus proximus") 
+```
+
+get the tank IDs 
+```{r}
+metadata <- read.csv("/home/kimberly.ledger/gadid_aquaria/gadid_mb_aquaria/gadid_aquariaDBO_metadata.csv") %>%
+  filter(project == "aquaria") %>%
+  select(!station_ID) %>%
+  select(!location1:time_of_day) %>%
+  select(!Sample_ID) %>%
+  select(!pcr_replicate) %>%
+  select(!project) %>%
+  rename(community = extraction_ID) %>%
+  unique()
+```
+
+
+join read proportions with metadata
+```{r}
+result.join <- result.dat %>%
+  left_join(metadata)
+```
+
+just looking at one tank first
+```{r}
+tank_40 <- result.join %>%
+  filter(tank_ID == 40)
+```
+
+plot community 1 - posterior estimates
+```{r}
+post_40 <- ggplot(tank_40) + # %>% 
+          geom_errorbar(aes(x=Species,ymin=raw.2.5,ymax=raw.97.5,color=Species),width=0) +
+          geom_errorbar(aes(x=Species,ymin=raw.25,ymax=raw.75,color=Species),width=0, linewidth=2) +        
+          geom_point(aes(x=Species,y=raw.mean,color=Species),shape =21,fill="black",size=2) +
+          #scale_y_continuous(NULL,expand=c(0,NA),limits=c(0,NA),breaks=yBREAKS) +
+          #scale_shape_manual(values=c(21,22,24)) +
+          #scale_fill_manual(values=col.val,"Community") +
+          #scale_color_manual(values=col.val,"Calibration") +
+          #scale_x_continuous(NULL,breaks=xBREAKS$comm.idx,labels=xBREAKS$community,limits=c(NA,3.3)) +
+          ylim(0, 1) +
+          facet_wrap(~community) + 
+          ylab("proportion of reads") +
+          theme_classic() +
+          theme(#legend.position = c(0.4755,0.85),
+                legend.position = "right",
+                plot.margin = margin(0,0,0,0.85,"lines"),
+                legend.key.size=unit(0.1,'lines'),
+                legend.text=element_text(size=7),
+                legend.title=element_text(size=9))
+          
+post_40
+```
+
+plot community 1 - posterior estimates
+```{r}
+simple_40 <- ggplot(tank_40) + # %>% 
+          geom_point(aes(x=Species,y=simple.Mean,color=Species),shape =21,fill="black",size=2) +
+          facet_wrap(~community) + 
+          ylab("proportion of reads") +
+          ylim(0, 1) +
+          theme_classic() +
+          theme(#legend.position = c(0.4755,0.85),
+                legend.position = "right",
+                plot.margin = margin(0,0,0,0.85,"lines"),
+                legend.key.size=unit(0.1,'lines'),
+                axis.text.x = element_blank(),
+                legend.text=element_text(size=7),
+                legend.title=element_text(size=9))
+          
+simple_40
+```
+
+
+plot mean raw and mean mock-adjusted for a tank 
+```{r}
+temp1 <- result.join %>%
+  filter(tank_ID == 40) %>%
+  dplyr::select(Species, community, simple.Mean, mock1.mean, raw.mean)
+
+temp2 <- temp1[,c(2:6)] %>%
+  pivot_longer(cols = c(3:5), names_to = "method", values_to = "prop")
+
+# get rid of reference species denotion
+temp2 <- temp2 %>%
+  mutate(SP= ifelse(grepl("zRefSpecies_",Species),
+  substr(Species,13,nchar(Species)),
+  as.character(Species)))
+
+plot_prop <- temp2 %>%
+  ggplot(aes(x=community, y=prop, fill=SP)) +
+  geom_bar(stat = "identity") + 
+  theme_bw() +
+  facet_grid(~method, scales = 'free') +
+  labs(
+    y = "proportion of sequencing reads",
+    x = "method",
+    title = "tank 40") + 
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 0.95),
+    legend.text = element_text(size = 8),
+    legend.key.size = unit(0.3, "cm"),
+    legend.position = "right",
+    legend.title = element_blank()
+  )
+
+plot_prop
+```
+
+plot mean raw and mean mock-adjusted for a tank 
+```{r}
+temp1 <- result.join %>%
+  filter(tank_ID == 17) %>%
+  dplyr::select(Species, community, simple.Mean, mock1.mean, raw.mean)
+
+temp2 <- temp1[,c(2:6)] %>%
+  pivot_longer(cols = c(3:5), names_to = "method", values_to = "prop")
+
+# get rid of reference species denotion
+temp2 <- temp2 %>%
+  mutate(SP= ifelse(grepl("zRefSpecies_",Species),
+  substr(Species,13,nchar(Species)),
+  as.character(Species)))
+
+plot_prop <- temp2 %>%
+  ggplot(aes(x=community, y=prop, fill=SP)) +
+  geom_bar(stat = "identity") + 
+  theme_bw() +
+  facet_grid(~method, scales = 'free') +
+  labs(
+    y = "proportion of sequencing reads",
+    x = "method",
+    title = "tank 17") + 
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 0.95),
+    legend.text = element_text(size = 8),
+    legend.key.size = unit(0.3, "cm"),
+    legend.position = "right",
+    legend.title = element_blank()
+  )
+
+plot_prop
+```
+
+plot mean raw and mean mock-adjusted for a tank 
+```{r}
+temp1 <- result.join %>%
+  filter(tank_ID == 71) %>%
+  dplyr::select(Species, community, simple.Mean, mock1.mean, raw.mean)
+
+temp2 <- temp1[,c(2:6)] %>%
+  pivot_longer(cols = c(3:5), names_to = "method", values_to = "prop")
+
+# get rid of reference species denotion
+temp2 <- temp2 %>%
+  mutate(SP= ifelse(grepl("zRefSpecies_",Species),
+  substr(Species,13,nchar(Species)),
+  as.character(Species)))
+
+plot_prop <- temp2 %>%
+  ggplot(aes(x=community, y=prop, fill=SP)) +
+  geom_bar(stat = "identity") + 
+  theme_bw() +
+  facet_grid(~method, scales = 'free') +
+  labs(
+    y = "proportion of sequencing reads",
+    x = "method",
+    title = "tank 71") + 
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 0.95),
+    legend.text = element_text(size = 8),
+    legend.key.size = unit(0.3, "cm"),
+    legend.position = "right",
+    legend.title = element_blank()
+  )
+
+plot_prop
+```
+
+plot mean raw and mean mock-adjusted for a tank 
+```{r}
+temp1 <- result.join %>%
+  filter(tank_ID == 38) %>%
+  dplyr::select(Species, community, simple.Mean, mock1.mean, raw.mean)
+
+temp2 <- temp1[,c(2:6)] %>%
+  pivot_longer(cols = c(3:5), names_to = "method", values_to = "prop")
+
+# get rid of reference species denotion
+temp2 <- temp2 %>%
+  mutate(SP= ifelse(grepl("zRefSpecies_",Species),
+  substr(Species,13,nchar(Species)),
+  as.character(Species)))
+
+plot_prop <- temp2 %>%
+  ggplot(aes(x=community, y=prop, fill=SP)) +
+  geom_bar(stat = "identity") + 
+  theme_bw() +
+  facet_grid(~method, scales = 'free') +
+  labs(
+    y = "proportion of sequencing reads",
+    x = "method",
+    title = "tank 38") + 
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 0.95),
+    legend.text = element_text(size = 8),
+    legend.key.size = unit(0.3, "cm"),
+    legend.position = "right",
+    legend.title = element_blank()
+  )
+
+plot_prop
+```
+
+okay, now let me adapt the code from the decontamination pipeline to see what tank replicates, if any, have high dissimilarity 
+
+instead of filtering by the biological replicates, i need to filter by the unique extractions.  the 'dist_to_centroid' function later on doesn't like the different number of replicates or that there are so many for a few.. not sure exactly. 
+
+how many replicates does each tank have? 
+```{r}
+result.join %>%
+  group_by(tank_ID) %>%
+  summarise(nrep = n_distinct(community)) %>%
+  filter(nrep == 2)  # there are two (51 and 59) 
+  #filter(nrep == 1) # there are none!  
+```
+
+remove the tanks with only one pcr rep from the data frame
+```{r}
+#result.temp <- result.join %>%
+#  filter(tank_ID != 51) %>%
+#  filter(tank_ID != 59)
+```
+
+first, i'll calculate an eDNA index for the mock1.mean (this normalization doesn't really change the prop that much...)
+```{r}
+normalized <- result.join %>%
+  dplyr::group_by(Species) %>%
+  mutate(Colmax = max(mock1.mean, na.rm = TRUE),     ## update with simple, mock, or raw mean
+         Normalized_reads = mock1.mean/Colmax)
+
+#add a new sample id column that also includes the tank - will use this for dissimilarity measures
+normalized <- normalized %>%
+  unite(tank_community, tank_ID, community, sep = "_", remove = FALSE)
+```
+
+
+```{r}
+library(vegan)
+
+tibble_to_matrix <- function (tb) {
+  
+  tb %>%
+  #normalized %>%
+    group_by(Species, tank_community) %>% 
+    summarise(nReads = sum(Normalized_reads)) %>% 
+    spread ( key = "Species", value = "nReads", fill = 0) %>%
+    ungroup() -> matrix_1
+    samples <- pull (matrix_1, tank_community)
+    matrix_1[,-1] -> matrix_1
+    data.matrix(matrix_1) -> matrix_1
+    dimnames(matrix_1)[[1]] <- samples
+    vegdist(matrix_1) -> matrix_1
+}
+```
+
+
+```{r}
+all.distances.full <- tibble_to_matrix(normalized)
+
+# Do all samples have a name?
+summary(is.na(names(all.distances.full)))
+```
+
+make the pairwise distances a long table
+```{r}
+as_tibble(subset(melt(as.matrix(all.distances.full)))) -> all.distances.melted
+
+# Any major screw ups
+summary(is.na(all.distances.melted$value))
+
+# Now, create a three variables for all distances, they could be PCR replicates, BIOL replicates, or from the same site
+
+all.distances.melted %>%
+  separate (Var1, into = c("Tank1", "community1"), sep = "\\_", remove = FALSE) %>%
+  separate (Var2, into = c("Tank2", "community2"), sep = "\\_", remove = FALSE) %>%
+  mutate (Distance.type = case_when(community1 == community2 ~ "Biological Replicates",
+                                      Tank1 == Tank2 ~ "Same Tank",
+                                      TRUE ~ "Different Tank"
+                                     )) %>%
+  dplyr::select(Sample1 = Var1, Sample2 = Var2 , value , Distance.type) %>%
+  filter (Sample1 != Sample2) -> all.distances.to.plot
+
+# Checking all went well
+
+sapply(all.distances.to.plot, function(x) summary(is.na(x)))
+```
+
+```{r}
+all.distances.to.plot$Distance.type <- all.distances.to.plot$Distance.type  %>% fct_relevel("Biological Replicates", "Same Tank")
+
+ggplot (all.distances.to.plot) +
+  geom_histogram (aes (fill = Distance.type, x = value, after_stat(ndensity)), position = "dodge",  alpha = 0.9, bins = 50) +
+  facet_wrap( ~ Distance.type) +
+  theme_bw() +
+  labs (x = "Pairwise dissimilarity", y = "Density" ,
+        Distance.type = "Distance") +
+    guides (fill = "none")
+
+  #ggsave("visual.anova.png", dpi = "retina")
+```
+
+cool, samples from the same tank are usually quite similar. 
+
+summarize pairwise dissimilarity results 
+```{r}
+all.distances.to.plot %>%
+  group_by(Distance.type) %>%
+  summarize(Mean = mean(value),
+            SD=sd(value),
+                q.025 = quantile(value,probs=0.025),
+                #q.05 = quantile(value,probs=0.05),
+                #q.25 = quantile(value,probs=0.25),
+                #q.75 = quantile(value,probs=0.75),
+                #q.95 = quantile(value,probs=0.95),
+                q.975 = quantile(value,probs=0.975))
+```
+
+which samples/tanks are about the 0.25 dissimilarity 
+```{r}
+pairwise <- all.distances.to.plot %>%
+  filter(Distance.type == "Same Tank") %>%
+  filter(value > 0.25)
+pairwise
+```
+
+```{r}
+#write.csv(pairwise, "tank_dissimilarity/pairwise_raw_tank_dissimilarity.csv", row.names = F)
+```
+
+
+next i will follow what was done here:  (https://github.com/ramongallego/eDNA.and.Ocean.Acidification.Gallego.et.al.2020/blob/master/Scripts/Denoising.all.runs.Rmd) and instead of choosing outliers based on the pairwise distances, we can do a similar thing using the distance to centroid. 
+
+now identify and discard outliers 
+```{r message=FALSE, warning=FALSE}
+normalized %>%
+  group_by(tank_ID) %>% nest() -> nested.cleaning 
+
+nested.cleaning %>% 
+  mutate(matrix = map(data, tibble_to_matrix)) -> nested.cleaning
+
+nested.cleaning %>% mutate(ncomparisons = map(matrix, length)) -> nested.cleaning
+```
+
+```{r}
+dist_to_centroid <- function (x,y) {
+  
+  #biol <- rep(y, dim(x)[[1]])
+  biol <- rep(y, length(x))
+  
+  if (length(biol) == 1) {
+    output = rep(x[1]/2,2)
+    names(output) <- attr(x, "Labels")
+  }else{ 
+    
+  dispersion <- betadisper(x, group = biol)
+  output = dispersion$distances
+  }
+  output
+    }
+```
+
+```{r}
+nested.cleaning.temp <- nested.cleaning %>% 
+  mutate(distances = map2(matrix, tank_ID, dist_to_centroid))
+
+all_distances <- nested.cleaning.temp %>%
+  unnest_longer(distances) %>%
+  dplyr::select(tank_ID, distances_id, distances)
+
+hist(all_distances$distances)
+```
+
+calculate normal distribution of distances to centroid
+```{r}
+normparams <- MASS::fitdistr(all_distances$distances, "normal")$estimate                                      
+probs <- pnorm(all_distances$distances, normparams[1], normparams[2])
+outliers_centroid <- which(probs>0.95)
+
+discard_centroid <- all_distances$distances_id[outliers_centroid]
+discard_centroid
+```
+
+okay there are a few more tanks included here than than before. i'll go back up to the code earlier and plot some of them.   
+11_e02158, 41_e02158, is a bit different than the other reps, but not by much 
+
+```{r}
+#write.csv(discard_centroid, "centroid_mock_tank_dissimilarity.csv", row.names = F)
+```
+
+```{r}
+#write.csv(result.join, "joined_community_estimates.csv", row.names = F)
+```
+

@@ -1,0 +1,220 @@
+---
+title: "summarize metabarcoding tank proportions"
+author: "Kimberly Ledger"
+date: "2023-11-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+load libraries
+```{r}
+library(tidyverse)
+library(dplyr)
+```
+
+read in sample sheets that includes all libraries (sample replicates) included in sequencing to do complete tracking of replicates through the analysis workflow
+```{r}
+metadata <- read.csv("/home/kimberly.ledger/gadid_aquaria/gadid_mb_aquaria/gadid_aquariaDBO_metadata.csv") %>%
+  filter(project == "aquaria") %>%
+  dplyr::select(!c(location1:time_of_day)) %>%
+  dplyr::select(!station_ID)
+
+#illumina output changed "_" to "-"
+metadata$Sample_ID <- gsub("_", "-", metadata$Sample_ID) 
+```
+
+remove the samples from miseq run B that were also included in miseq run A (as i did during the data processing)
+```{r}
+both_runs_extID <- c("e02362", "e02363", "e02366", "e02370", "e02372", "e02373", "e02374", "e02375", "e02380")
+
+both_runs <- metadata %>%
+  filter(extraction_ID %in% both_runs_extID)
+
+both_runs_A <- both_runs %>%
+  filter(MiSeq_run == "A")
+
+metadata <- metadata %>%
+  filter(!extraction_ID %in% both_runs_extID) %>%
+  bind_rows(both_runs_A) 
+```
+
+reformat metadata that removes the sample_ID and adds a column for the number of pcr replicates for each extraction_ID
+```{r}
+metadata_2 <- metadata %>%
+  group_by(extraction_ID) %>%
+  mutate(N.pcr.reps = n()) %>%
+  dplyr::select(!Sample_ID) %>%
+  dplyr::select(!pcr_replicate) %>%
+  dplyr::select(!project) %>%
+  unique()
+```
+
+
+
+read in the extraction/biological replicate/community level estimates of read proportions (simple mean, raw mean and mock-community adjusted reads)
+
+- okay, before i ran the quant metabarcoding model, the samples that were in both miseq runs got duplicated because i did not remove the B run from metadata... only the reads from the A run were processed, but the export say both A and B... need to do some extra thing to fix this. 
+```{r}
+quant_results_to_replace <- read.csv("joined_community_estimates.csv") %>%
+  filter(community %in% both_runs_extID) %>%
+  filter(!MiSeq_run == "B")
+  
+quant_results <- read.csv("joined_community_estimates.csv") %>%
+  filter(!community %in% both_runs_extID) %>%
+  bind_rows(quant_results_to_replace) %>%
+  dplyr::select(Species, community, simple.N, simple.Mean, raw.mean, mock1.mean) %>%
+  mutate(Species = ifelse(Species == "zRefSpecies_Gadus macrocephalus", "Gadus macrocephalus", Species)) %>%
+  mutate(simple.Mean = ifelse(is.na(simple.Mean), 0, simple.Mean))
+
+quant_wide <- quant_results %>%
+  pivot_wider(
+    names_from = "Species",
+    values_from = c("simple.Mean", "raw.mean", "mock1.mean", values_fill = 0)
+  ) %>%
+  rename(extraction_ID = community)
+```
+
+
+join the two dataframes
+```{r}
+join <- metadata_2 %>%
+  left_join(quant_wide, by = "extraction_ID")
+```
+
+okay, now can i indicate which extraction IDs had outlier pcr-replicate dissimilarity (using taxa level test)
+```{r}
+pcr_dissimilarity <- read.csv("pcr_dissimilarity_outliers.csv") %>%
+  dplyr::select(!X)
+
+#these are indicated by tank_altID-replicate - to seperate
+pcr_dissimilarity <- pcr_dissimilarity %>%
+  separate(col = discard_centroid, into = c("tank_ID", "alt_ID"))
+```
+
+```{r}
+join <- join %>%
+  mutate(pcr_dissim = ifelse(alt_ID %in% pcr_dissimilarity$alt_ID, "yes", "no")) %>%
+  mutate(pcr_dissim = ifelse(is.na(simple.N), NA, pcr_dissim))
+```
+
+
+now add in the tank dissimilarity estimates
+```{r}
+mock_dis <- read.csv("centroid_mock_tank_dissimilarity.csv")
+
+#okay these have all the same IDs, with the exception of one missing from the simple... will just use the raw_dis object then
+
+mock_dis <- mock_dis %>%
+  separate(col = x, into = c("tank_ID", "extraction_ID"))
+```
+
+```{r}
+join <- join %>%
+  mutate(tank_dissim = ifelse(extraction_ID %in% mock_dis$extraction_ID, "yes", "no")) %>%
+  mutate(tank_dissim = ifelse(is.na(simple.N), NA, tank_dissim)) 
+```
+
+export a similified verion of this to share with collaborators 
+```{r}
+join_simple <- join %>%
+  dplyr::select(!c(extraction_plate:collection_day)) %>%
+  arrange(tank_ID)
+```
+
+```{r}
+#write.csv(join_simple, "sample_estimates.csv", row.names = F)
+```
+
+
+```{r}
+join_simple %>%
+  filter(is.na(simple.N)) %>%
+  group_by(tank_ID) %>%
+  summarize(count = n()) %>%
+  filter(count == 3)
+```
+
+
+now summarize the proportions at the tank level - will just do this with the mock1 estimates for now... 
+```{r}
+#to keep the T tanks separate, i need to modify their tank names
+join_simple[174,3] <- "T_118"
+join_simple[188,3] <- "T_55"
+join_simple[191,3] <- "T_188"
+
+tanks <- join_simple %>%
+  select(!`simple.Mean_Boreogadus saida`:`raw.mean_Gadus macrocephalus`) %>%
+  pivot_longer(cols = `mock1.mean_Boreogadus saida`:`mock1.mean_Gadus macrocephalus`, names_to = "Species", values_to = "mock1.mean") %>%
+  mutate(Species = ifelse(Species == "mock1.mean_Boreogadus saida", "Boreogadus saida", Species)) %>%
+  mutate(Species = ifelse(Species == "mock1.mean_Gadus chalcogrammus", "Gadus chalcogrammus", Species)) %>%
+  mutate(Species = ifelse(Species == "mock1.mean_Gadus macrocephalus", "Gadus macrocephalus", Species)) %>%
+  filter(!is.na(simple.N)) %>%
+  group_by(tank_ID, Species) %>%
+  summarise(n.simple.N = sum(simple.N),
+            n.sample.dissim = sum(pcr_dissim == "yes", na.rm = TRUE),
+            n.tank.dissim = sum(tank_dissim == "yes", na.rm = TRUE),
+            Mean = mean(mock1.mean),
+            SD=sd(mock1.mean),
+                q.025 = quantile(mock1.mean,probs=0.025),
+                #q.05 = quantile(mock1.mean,probs=0.05),
+                #q.25 = quantile(mock1.mean,probs=0.25),
+                #q.75 = quantile(mock1.mean,probs=0.75),
+                #q.95 = quantile(mock1.mean,probs=0.95),
+                q.975 = quantile(mock1.mean,probs=0.975))  
+```
+
+```{r}
+write.csv(tanks, "aquaria_DBO/tank_mock_estimates.csv", row.names = F)
+```
+
+
+
+```{r}
+tank_removeoutliers <- join_simple %>%
+  select(!`simple.Mean_Boreogadus saida`:`raw.mean_Gadus macrocephalus`) %>%
+  pivot_longer(cols = `mock1.mean_Boreogadus saida`:`mock1.mean_Gadus macrocephalus`, names_to = "Species", values_to = "mock1.mean") %>%
+  mutate(Species = ifelse(Species == "mock1.mean_Boreogadus saida", "Boreogadus saida", Species)) %>%
+  mutate(Species = ifelse(Species == "mock1.mean_Gadus chalcogrammus", "Gadus chalcogrammus", Species)) %>%
+  mutate(Species = ifelse(Species == "mock1.mean_Gadus macrocephalus", "Gadus macrocephalus", Species)) %>%
+  filter(!is.na(simple.N)) %>%
+  filter(tank_dissim == "no") %>%
+  group_by(tank_ID, Species) %>%
+  summarise(n.simple.N = sum(simple.N),
+            n.sample.dissim = sum(pcr_dissim == "yes", na.rm = TRUE),
+            #n.tank.dissim = sum(tank_dissim == "yes", na.rm = TRUE),
+            Mean = mean(mock1.mean),
+            SD=sd(mock1.mean),
+                q.025 = quantile(mock1.mean,probs=0.025),
+                #q.05 = quantile(mock1.mean,probs=0.05),
+                #q.25 = quantile(mock1.mean,probs=0.25),
+                #q.75 = quantile(mock1.mean,probs=0.75),
+                #q.95 = quantile(mock1.mean,probs=0.95),
+                q.975 = quantile(mock1.mean,probs=0.975))  
+```
+
+```{r}
+#write.csv(tank_removeoutliers, "aquaria_DBO/tank_mock_estimates_no_outliers.csv", row.names = F)
+```
+
+
+plot 
+```{r}
+tank_prop %>%
+  filter(tank_ID == 10)
+```
+
+```{r}
+tank_list <- c(11:30)
+
+tank_prop %>%
+  filter(tank_ID %in% tank_list) %>%
+  ggplot() +
+      geom_errorbar(aes(x=tank_ID,ymin=q.025,ymax=q.975,color=Species),width=0) +
+      geom_errorbar(aes(x=tank_ID,ymin=q.25,ymax=q.75,color=Species),size=2,width=0) +        
+      geom_point(aes(x=tank_ID,y=Mean,color=Species),size=3) +
+      ylab("mean proportion") +
+      theme_bw()
+```
