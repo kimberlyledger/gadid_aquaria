@@ -74,7 +74,7 @@ quant_wide <- quant_results %>%
     names_from = "Species",
     values_from = c("simple.Mean", "raw.mean", "mock1.mean", values_fill = 0)
   ) %>%
-  rename(extraction_ID = community)
+  dplyr::rename(extraction_ID = community)
 ```
 
 
@@ -104,8 +104,6 @@ join <- join %>%
 now add in the tank dissimilarity estimates
 ```{r}
 mock_dis <- read.csv("centroid_mock_tank_dissimilarity.csv")
-
-#okay these have all the same IDs, with the exception of one missing from the simple... will just use the raw_dis object then
 
 mock_dis <- mock_dis %>%
   separate(col = x, into = c("tank_ID", "extraction_ID"))
@@ -145,7 +143,44 @@ join_simple[174,3] <- "T_118"
 join_simple[188,3] <- "T_55"
 join_simple[191,3] <- "T_188"
 
-tanks <- join_simple %>%
+simple.mean_tanks <- join_simple %>%
+  select(!`raw.mean_Boreogadus saida`:`mock1.mean_Gadus macrocephalus`) %>%
+  pivot_longer(cols = `simple.Mean_Boreogadus saida`:`simple.Mean_Gadus macrocephalus`, names_to = "Species", values_to = "simple.mean") %>%
+  mutate(Species = ifelse(Species == "simple.Mean_Boreogadus saida", "Boreogadus saida", Species)) %>%
+  mutate(Species = ifelse(Species == "simple.Mean_Gadus chalcogrammus", "Gadus chalcogrammus", Species)) %>%
+  mutate(Species = ifelse(Species == "simple.Mean_Gadus macrocephalus", "Gadus macrocephalus", Species)) %>%
+  filter(!is.na(simple.N)) %>%
+  group_by(tank_ID, Species) %>%
+  summarise(n.simple.N = sum(simple.N),
+            n.sample.dissim = sum(pcr_dissim == "yes", na.rm = TRUE),
+            n.tank.dissim = sum(tank_dissim == "yes", na.rm = TRUE),
+            Mean = mean(simple.mean),
+            SD=sd(simple.mean),
+                q.025 = quantile(simple.mean,probs=0.025),
+                Median = quantile(simple.mean,probs=0.5),
+                q.975 = quantile(simple.mean,probs=0.975))  
+
+
+raw.mean_tanks <- join_simple %>%
+  select(!`simple.Mean_Boreogadus saida`:`simple.Mean_Gadus macrocephalus`) %>%
+  select(!`mock1.mean_Boreogadus saida`:`mock1.mean_Gadus macrocephalus`) %>%
+  pivot_longer(cols = `raw.mean_Boreogadus saida`:`raw.mean_Gadus macrocephalus`, names_to = "Species", values_to = "raw.mean") %>%
+  mutate(Species = ifelse(Species == "raw.mean_Boreogadus saida", "Boreogadus saida", Species)) %>%
+  mutate(Species = ifelse(Species == "raw.mean_Gadus chalcogrammus", "Gadus chalcogrammus", Species)) %>%
+  mutate(Species = ifelse(Species == "raw.mean_Gadus macrocephalus", "Gadus macrocephalus", Species)) %>%
+  filter(!is.na(simple.N)) %>%
+  group_by(tank_ID, Species) %>%
+  summarise(n.simple.N = sum(simple.N),
+            n.sample.dissim = sum(pcr_dissim == "yes", na.rm = TRUE),
+            n.tank.dissim = sum(tank_dissim == "yes", na.rm = TRUE),
+            Mean = mean(raw.mean),
+            SD=sd(raw.mean),
+                q.025 = quantile(raw.mean,probs=0.025),
+                Median = quantile(raw.mean,probs=0.5),  
+                q.975 = quantile(raw.mean,probs=0.975))  
+
+
+mock.mean_tanks <- join_simple %>%
   select(!`simple.Mean_Boreogadus saida`:`raw.mean_Gadus macrocephalus`) %>%
   pivot_longer(cols = `mock1.mean_Boreogadus saida`:`mock1.mean_Gadus macrocephalus`, names_to = "Species", values_to = "mock1.mean") %>%
   mutate(Species = ifelse(Species == "mock1.mean_Boreogadus saida", "Boreogadus saida", Species)) %>%
@@ -159,62 +194,43 @@ tanks <- join_simple %>%
             Mean = mean(mock1.mean),
             SD=sd(mock1.mean),
                 q.025 = quantile(mock1.mean,probs=0.025),
-                #q.05 = quantile(mock1.mean,probs=0.05),
-                #q.25 = quantile(mock1.mean,probs=0.25),
-                #q.75 = quantile(mock1.mean,probs=0.75),
-                #q.95 = quantile(mock1.mean,probs=0.95),
+                Median = quantile(mock1.mean,probs=0.5),
                 q.975 = quantile(mock1.mean,probs=0.975))  
+
 ```
 
 ```{r}
-write.csv(tanks, "aquaria_DBO/tank_mock_estimates.csv", row.names = F)
+write.csv(mock.mean_tanks, "tank_mock_estimates.csv", row.names = F)
+write.csv(simple.mean_tanks, "tank_simple_estimates.csv", row.names = F)
+write.csv(raw.mean_tanks, "tank_raw_estimates.csv", row.names = F)
 ```
 
 
 
 ```{r}
-tank_removeoutliers <- join_simple %>%
-  select(!`simple.Mean_Boreogadus saida`:`raw.mean_Gadus macrocephalus`) %>%
-  pivot_longer(cols = `mock1.mean_Boreogadus saida`:`mock1.mean_Gadus macrocephalus`, names_to = "Species", values_to = "mock1.mean") %>%
-  mutate(Species = ifelse(Species == "mock1.mean_Boreogadus saida", "Boreogadus saida", Species)) %>%
-  mutate(Species = ifelse(Species == "mock1.mean_Gadus chalcogrammus", "Gadus chalcogrammus", Species)) %>%
-  mutate(Species = ifelse(Species == "mock1.mean_Gadus macrocephalus", "Gadus macrocephalus", Species)) %>%
-  filter(!is.na(simple.N)) %>%
-  filter(tank_dissim == "no") %>%
-  group_by(tank_ID, Species) %>%
-  summarise(n.simple.N = sum(simple.N),
-            n.sample.dissim = sum(pcr_dissim == "yes", na.rm = TRUE),
-            #n.tank.dissim = sum(tank_dissim == "yes", na.rm = TRUE),
-            Mean = mean(mock1.mean),
-            SD=sd(mock1.mean),
-                q.025 = quantile(mock1.mean,probs=0.025),
-                #q.05 = quantile(mock1.mean,probs=0.05),
-                #q.25 = quantile(mock1.mean,probs=0.25),
-                #q.75 = quantile(mock1.mean,probs=0.75),
-                #q.95 = quantile(mock1.mean,probs=0.95),
-                q.975 = quantile(mock1.mean,probs=0.975))  
+# tank_removeoutliers <- join_simple %>%
+#   select(!`simple.Mean_Boreogadus saida`:`raw.mean_Gadus macrocephalus`) %>%
+#   pivot_longer(cols = `mock1.mean_Boreogadus saida`:`mock1.mean_Gadus macrocephalus`, names_to = "Species", values_to = "mock1.mean") %>%
+#   mutate(Species = ifelse(Species == "mock1.mean_Boreogadus saida", "Boreogadus saida", Species)) %>%
+#   mutate(Species = ifelse(Species == "mock1.mean_Gadus chalcogrammus", "Gadus chalcogrammus", Species)) %>%
+#   mutate(Species = ifelse(Species == "mock1.mean_Gadus macrocephalus", "Gadus macrocephalus", Species)) %>%
+#   filter(!is.na(simple.N)) %>%
+#   filter(tank_dissim == "no") %>%
+#   group_by(tank_ID, Species) %>%
+#   summarise(n.simple.N = sum(simple.N),
+#             n.sample.dissim = sum(pcr_dissim == "yes", na.rm = TRUE),
+#             #n.tank.dissim = sum(tank_dissim == "yes", na.rm = TRUE),
+#             Mean = mean(mock1.mean),
+#             SD=sd(mock1.mean),
+#                 q.025 = quantile(mock1.mean,probs=0.025),
+#                 #q.05 = quantile(mock1.mean,probs=0.05),
+#                 #q.25 = quantile(mock1.mean,probs=0.25),
+#                 #q.75 = quantile(mock1.mean,probs=0.75),
+#                 #q.95 = quantile(mock1.mean,probs=0.95),
+#                 q.975 = quantile(mock1.mean,probs=0.975))  
 ```
 
 ```{r}
 #write.csv(tank_removeoutliers, "aquaria_DBO/tank_mock_estimates_no_outliers.csv", row.names = F)
 ```
 
-
-plot 
-```{r}
-tank_prop %>%
-  filter(tank_ID == 10)
-```
-
-```{r}
-tank_list <- c(11:30)
-
-tank_prop %>%
-  filter(tank_ID %in% tank_list) %>%
-  ggplot() +
-      geom_errorbar(aes(x=tank_ID,ymin=q.025,ymax=q.975,color=Species),width=0) +
-      geom_errorbar(aes(x=tank_ID,ymin=q.25,ymax=q.75,color=Species),size=2,width=0) +        
-      geom_point(aes(x=tank_ID,y=Mean,color=Species),size=3) +
-      ylab("mean proportion") +
-      theme_bw()
-```

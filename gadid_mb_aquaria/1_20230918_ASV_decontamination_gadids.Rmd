@@ -380,6 +380,9 @@ reads_to_remove_per_ASV <- asv_table_filter1.5 %>%
   group_by(ASV) %>%
   summarize(max_reads = max(reads))
 
+reads_to_remove_per_ASV %>%
+  arrange(desc(max_reads))
+
 reads_to_remove_per_sample <- asv_table_filter1.5 %>%
   left_join(reads_to_remove_per_ASV, by = "ASV") %>%
   mutate(read_minus_contamination = reads - max_reads) %>%
@@ -510,6 +513,7 @@ asv_table_filter3 <- asv_table_filter3 %>%
 did we lose any ASVs during this step? 
 ```{r}
 length(unique(asv_table_filter3$ASV)) 
+length(unique(asv_table_filter3$Sample_ID)) 
 ```
 
 
@@ -711,10 +715,10 @@ site.asv_occupancy_probs <- pattern.of.presense %>%
   left_join(occu_with_key_to_join)
 
 keepers <- site.asv_occupancy_probs %>%
-  filter(max_Occupancy_prob >= 0.8) %>%
+  filter(max_Occupancy_prob >= 0.7) %>%
   unite(tank_ID, ASV, col = 'filter_id', sep = '.', remove = F)
 discard <- site.asv_occupancy_probs %>%
-  filter(max_Occupancy_prob < 0.8)
+  filter(max_Occupancy_prob < 0.7)
 ```
 
 make a plot to see what the occupancy threshold should be 
@@ -744,6 +748,7 @@ asv_table_filter4 <- asv_table_filter4 %>%
 how many ASVs are left? 
 ```{r}
 length(unique(asv_table_filter4$ASV)) 
+length(unique(asv_table_filter4$Sample_ID)) 
 ```
 
 # 5. Dissimilarity between PCR (biological) replicates 
@@ -773,7 +778,8 @@ can't run this test on extraction with only one rep
 ```{r}
 temp_table <- asv_table_filter4 %>%
   filter(extraction_ID != "e02165") %>%
-  filter(extraction_ID != "e02427")
+  filter(extraction_ID != "e02427") %>%
+  filter(extraction_ID != "e02398")
 ```
 good to go. 
 
@@ -913,7 +919,7 @@ calculate normal distribution of distances to centroid
 ```{r}
 normparams <- MASS::fitdistr(all_distances$distances, "normal")$estimate                                      
 probs <- pnorm(all_distances$distances, normparams[1], normparams[2])
-outliers_centroid <- which(probs>0.95)
+outliers_centroid <- which(probs>0.99)
 
 discard_centroid <- all_distances$distances_id[outliers_centroid]
 discard_centroid
@@ -1017,7 +1023,7 @@ length(unique(asv_table_filter4$ASV))
 
 save the post-decontamination table 
 ```{r}
-#write.csv(asv_table_filter4, "20230918_decontamination_output_20231030.csv", row.names = FALSE)
+#write.csv(asv_table_filter4, "20230918_decontamination_output_20240313.csv", row.names = FALSE)
 ```
 
 

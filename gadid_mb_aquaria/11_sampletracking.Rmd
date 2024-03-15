@@ -1,0 +1,132 @@
+---
+title: "tracking replicates/samples"
+output: html_document
+date: "2024-03-13"
+---
+
+load libraries
+```{r}
+library(tidyverse)
+library(ggplot2)
+select <- dplyr::select
+rename <- dplyr::rename
+```
+
+read in starting replicate/sample metadata for the aquarium samples
+```{r}
+rep_metadata <- read.csv("gadid_mb_aquaria/gadid_aquariaDBO_metadata.csv") %>%
+  filter(project == "aquaria") %>%
+  select(!station_ID) %>%
+  select(!location1:time_of_day)
+
+#illumina output changed "_" to "-"
+rep_metadata$Sample_ID <- gsub("_", "-", rep_metadata$Sample_ID) 
+```
+
+- replicates in MiSeq_run == A were decontamined in "1_20230918_ASV_decontamination_gadids.Rmd" 
+- replicates in MiSeq_run == B were decontamined in "1_20230921_ASV_decontamination_gadids.Rmd" 
+
+- replicates removed during decontamination step3 (b/c of low read numbers) are contained in "20230918_decontamination_step3.csv" and "20230921_decontamination_step3.csv"
+```{r}
+A_step3 <- read.csv("gadid_mb_aquaria/20230918_decontamination_step3.csv")
+B_step3 <- read.csv("gadid_mb_aquaria/20230921_decontamination_step3.csv")
+
+rep_metadata <- rep_metadata %>%
+  mutate(low_reads = ifelse(Sample_ID %in% A_step3$Sample_ID, "yes", "no"),
+         low_reads = ifelse(Sample_ID %in% B_step3$Sample_ID, "yes", low_reads))
+```
+
+- then 3 replicates/extractions were removed because only one PCR replicate of the extraction ID remained - see "3_combining_gadid_aquaria_runs.Rmd" 
+```{r}
+e02165-B
+e02398-C
+e02427-C
+```
+
+- flagged PCR replicates with group centroid outside 95% of the normal distribution of group distances
+```{r}
+pcr_outilers <- read.csv("gadid_mb_aquaria/pcr_dissimilarity_outliers.csv")
+
+rep_metadata <- rep_metadata %>%
+  unite(ID1, tank_ID, alt_ID, sep = "_", remove = FALSE) %>%
+  unite(ID2, ID1, pcr_replicate, sep = "-", remove = FALSE) %>%
+  mutate(pcr_replicate_outlier = ifelse(ID2 %in% pcr_outilers$discard_centroid, "yes", "no"),
+         pcr_replicate_outlier = ifelse(low_reads == "yes", NA, pcr_replicate_outlier))
+```
+
+- tank dissimiarly - of mock1 mean estimates 
+```{r}
+tank_outliers <- read.csv("gadid_mb_aquaria/centroid_mock_tank_dissimilarity.csv")
+
+rep_metadata <- rep_metadata %>%
+  unite(ID3, tank_ID, extraction_ID, sep = "_", remove = FALSE) %>%
+    mutate(tank_replicate_outlier = ifelse(ID3 %in% tank_outliers$x, "yes", "no"),
+         tank_replicate_outlier = ifelse(low_reads == "yes", NA, tank_replicate_outlier))
+```
+
+
+```{r}
+dna_conc_sample_type <- rep_metadata %>%
+  filter(sample_type != "positive") %>%
+   filter(sample_type != "PCR_blank") %>%
+  ggplot(aes(x = sample_type, y = DNA_conc, fill = low_reads)) +
+  geom_boxplot() + 
+  theme_classic() + 
+  scale_y_continuous(trans = "log10") +  # log-transform y-axis
+   labs(x = "sample type",
+       y = "DNA concentration (ng/uL)",
+       fill = "low reads?") 
+dna_conc_sample_type
+```
+
+```{r}
+ggsave("figures/dna_conc_sample_type.png", plot = dna_conc_sample_type, width = 6, height = 4, dpi = 300)
+```
+
+
+
+```{r}
+dna_conc_dissim <- rep_metadata %>%
+  filter(low_reads == "no") %>%
+  ggplot(aes(x = tank_replicate_outlier, y = DNA_conc)) +
+  geom_boxplot() + 
+  theme_classic() + 
+  scale_y_continuous(trans = "log10") +  # log-transform y-axis
+   labs(x = "tank dissimilarity?",
+       y = "DNA concentration (ng/uL)") 
+dna_conc_dissim
+```
+
+```{r}
+ggsave("figures/dna_conc_dissim.png", plot = dna_conc_dissim, width = 6, height = 4, dpi = 300)
+```
+
+
+```{r}
+rep_metadata %>%
+  #filter(low_reads == "no") %>%
+  group_by(sample_type, low_reads) %>%
+  summarize(count = n())
+
+blanks <- rep_metadata %>%
+  filter(low_reads == "no") %>%
+  filter(sample_type == "field_blank")
+```
+
+
+
+- simple, raw, and mock results all here
+```{r}
+"joined_community_estimates.csv"
+```
+
+
+- removed duplicate samples and combined with dissimilarity measures
+```{r}
+"tank_mock_estimates.csv"
+"tank_simple_estimates.csv"
+"tank_raw_estimates.csv"
+```
+
+
+

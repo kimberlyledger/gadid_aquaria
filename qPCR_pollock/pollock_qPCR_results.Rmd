@@ -14,6 +14,7 @@ load libraries
 ```{r}
 library(tidyverse)
 select <- dplyr::select
+rename <- dplyr::rename
 ```
 
 
@@ -73,7 +74,10 @@ my_data %>%
 my_data_filtered %>%
   ggplot() + 
   geom_point(aes(x=WP_biomass, y=MEAN, color = site_name)) + 
-  geom_errorbar(aes(x=WP_biomass, y=MEAN, ymin = q.05, ymax = q.95, color = site_name)) #+
+  geom_errorbar(aes(x=WP_biomass, y=MEAN, ymin = q.05, ymax = q.95, color = site_name)) +
+  labs(x = "biomass (grams)",
+       y = "log10 DNA copy number") + 
+  theme_classic() #+
   #scale_x_log10()
 
 #my_data_filtered %>%
@@ -82,31 +86,108 @@ my_data_filtered %>%
 #  geom_errorbar(aes(x=WP_biomass, y=MEAN, ymin = q.05, ymax = q.95, color = site_name)) +
 #  scale_x_log10()
 
-arena_only%>%
-   ggplot() + 
-   geom_point(aes(x=WP_biomass, y=MEAN, color = site_name)) + 
-   geom_errorbar(aes(x=WP_biomass, y=MEAN, ymin = q.05, ymax = q.95, color = site_name)) #+
+# arena_only%>%
+#    ggplot() + 
+#    geom_point(aes(x=WP_biomass, y=MEAN, color = site_name)) + 
+#    geom_errorbar(aes(x=WP_biomass, y=MEAN, ymin = q.05, ymax = q.95, color = site_name)) #+
 #   scale_x_log10()
 ```
 
 
 ```{r}
-mod1 <- lm(MEAN ~ WP_biomass, data = my_data_filtered)
-summary(mod1)
+mod2 <- lm(10^MEAN ~ WP_biomass-1, data = my_data_filtered)
+summary(mod2)
+```
+
+calculate grand mean and 95% CI 
+```{r}
+wp <- my_data_filtered %>%
+  mutate(label = "individual") %>%
+  mutate(copy_mean = 10^MEAN,
+         copy_q.05 = 10^q.05,
+         copy_q.95 = 10^q.95)
+
+wp_mean <- wp %>%
+  group_by(WP_biomass) %>%
+  summarize(x_copy_mean = mean(copy_mean),
+            copy_q.05 = quantile(copy_mean,probs=0.05),
+            copy_q.95 = quantile(copy_mean,probs=0.95)) %>%
+  mutate(label = "mean") %>%
+  rename(copy_mean = x_copy_mean)
+            
+wp_w_mean <- wp %>%
+  bind_rows(wp_mean)
+
+wp_w_mean %>%
+  ggplot() + 
+  geom_point(aes(x=WP_biomass, y=copy_mean, color = label)) + 
+  geom_errorbar(aes(x=WP_biomass, y=copy_mean, ymin = copy_q.05, ymax = copy_q.95, color = label)) +
+  theme_classic() + 
+  scale_color_manual(values = c("grey", "black")) + 
+  geom_abline(slope = coef(mod2)[1], intercept = 0, color = "black", linetype = "dashed") +
+  labs(x = "Walleye pollock biomass (grams)",
+       y = "DNA concentration (copies per liter)", 
+       color = "tank ID") +
+   xlim(0, 4000)
+            
+#            SD=sd(mock1.mean),
+#                 q.025 = quantile(mock1.mean,probs=0.025),
+#                 #q.05 = quantile(mock1.mean,probs=0.05),
+#                 #q.25 = quantile(mock1.mean,probs=0.25),
+#                 #q.75 = quantile(mock1.mean,probs=0.75),
+#                 #q.95 = quantile(mock1.mean,probs=0.95),
+#                 q.975 = quantile(mock1.mean,probs=0.975))
+```
+
+let's plot without individual CI's
+```{r}
+wp <- my_data_filtered %>%
+  mutate(label = "individual") %>%
+  mutate(copy_mean = 10^MEAN)
+
+wp_mean <- wp %>%
+  group_by(WP_biomass) %>%
+  summarize(x_copy_mean = mean(copy_mean),
+            copy_q.05 = quantile(copy_mean,probs=0.05),
+            copy_q.95 = quantile(copy_mean,probs=0.95)) %>%
+  mutate(label = "mean") %>%
+  rename(copy_mean = x_copy_mean)
+            
+wp_w_mean <- wp %>%
+  bind_rows(wp_mean)
+
+wp_qPCR <- wp_w_mean %>%
+  ggplot() + 
+  geom_point(aes(x=WP_biomass, y=copy_mean, color = label), cex = 2) + 
+  geom_errorbar(aes(x=WP_biomass, y=copy_mean, ymin = copy_q.05, ymax = copy_q.95, color = label), width = 0) +
+  theme_classic() + 
+  scale_color_manual(values = c("grey", "black")) + 
+  geom_abline(slope = coef(mod2)[1], intercept = 0, color = "black", linetype = "dashed") +
+  labs(x = "Walleye pollock biomass (grams)",
+       y = "DNA concentration (copies per liter)", 
+       color = "tank") +
+   xlim(0, 4000)
+ wp_qPCR         
+```
+
+```{r}
+#ggsave("my_figures/pollock_qpcr.png", plot = , width = 6, height = 4, dpi = 300)
 ```
 
 
-make plots with transformed copy number output
+older plot versions
 ```{r}
 my_data_filtered %>%
   ggplot() + 
   geom_point(aes(x=WP_biomass, y=10^MEAN, color = site_name)) + 
   #scale_x_log10() +
-  theme_bw() + 
-  geom_smooth(aes(x=WP_biomass,y=10^MEAN), color = "grey", linetype = "dashed", method = "lm", se = FALSE) +
+  theme_classic() + 
+  geom_abline(slope = coef(mod2)[1], intercept = 0, color = "black", linetype = "dashed") +
+  #geom_smooth(aes(x=WP_biomass,y=10^MEAN), color = "grey", linetype = "dashed", method = "lm", se = FALSE) +
   labs(x = "Walleye pollock biomass (grams)",
        y = "DNA concentration (copies per liter)", 
-       color = "tank ID")
+       color = "tank ID") +
+   xlim(0, 4000)
 
 my_data_filtered %>%
   ggplot() + 
@@ -117,15 +198,6 @@ my_data_filtered %>%
 
 
 
-```{r}
-mod2 <- lm(10^MEAN ~ WP_biomass, data = my_data_filtered)
-summary(mod2)
-```
-
-okay, it seems like a good idea to remove those two Pole Barn tanks 
-
-
-
 
 ### my next goal is to use these qPCR copy number estimates to transform the metabarcoding read proportions out of the proportional data space 
 
@@ -133,11 +205,11 @@ adapted from Allen et al. 2023: convert these proportions into absolute abundanc
 
 load quantitative metabarcoding read proportion 
 ```{r}
-metabar <- read.csv("~/gadid_metabarcoding/aquaria_DBO/tank_mock_estimates.csv") %>%
+metabar <- read.csv("~/gadid_aquaria/gadid_mb_aquaria/tank_mock_estimates.csv") %>%
   filter(tank_ID %in% my_data_filtered$site_name)
 ```
 
-a handful of these tanks have sample or tank dissimilarity flags. come back and look at this at some point... and some qPCR have large SDs 
+one tank (40) has tank dissimilarity flags from mb.  come back and look at this. 
 ```{r}
 pollock_metabar <- metabar %>%
   filter(Species == "Gadus chalcogrammus") %>%
@@ -148,8 +220,11 @@ calculate C(amplifiable) = C(qPCR of reference)/Proportion(reference)
 ```{r}
 C_amp <- pollock_metabar %>%
   left_join(my_data_filtered, by = "site_name") %>%
-  mutate(C_amp = (MEAN)/Mean) %>%  
-  select(site_name, C_amp)
+  mutate(C_amp_mean = MEAN/Mean,
+         C_amp_q.025 = q.025.y/q.025.x,
+         C_amp_median = Median.y/Median.x,
+         C_amp_q.975 = q.975.y/q.975.x) %>%  
+  select(site_name, C_amp_mean, C_amp_q.025, C_amp_median, C_amp_q.975)
 ```
 
 join back to full metabarcoding results and calculate DNA concentration by species and tank 
@@ -157,8 +232,10 @@ join back to full metabarcoding results and calculate DNA concentration by speci
 all_metabar <- metabar %>%
   rename(site_name = tank_ID) %>%
   left_join(C_amp) %>%
-  mutate(Conc = C_amp*Mean) #%>%
-  #mutate(Conc_p10 = C_amp_p10*Mean)
+  mutate(Conc_mean = C_amp_mean*Mean,
+         Conc_q.025 = C_amp_q.025*q.025,
+         Conc_median = C_amp_median*Median,
+         Conc_q.975 = C_amp_q.975*q.975)
 ```
 
 join back to the tank metadata
@@ -189,65 +266,130 @@ combined <- all_metabar %>%
 ```
 
 
-```{r}
-mod3 <- lm(Conc~biomass-1, data = combined)
-summary(mod3)
-```
 
 the moment of truth.... plot biomass
 ```{r}
 mypal <- c("#6a6599", "#79af97", "#00a1d5")   #purple, green, blue
 
 combined %>%
-  #filter(biomass < 5500) %>%
+  filter(biomass < 5000) %>%
+  filter(biomass > 0) %>%
   ggplot() + 
-  geom_point(aes(x=biomass, y=Conc, color = Species)) + 
+  geom_point(aes(x=log10(biomass), y=Conc_mean, color = Species)) + 
   theme_classic() + 
-  #geom_smooth(aes(x=biomass,y=Conc), formula = y ~ x - 1, color = "black", linetype = "dashed", method = "lm", se = FALSE) +
-  geom_abline(slope = coef(mod3)[1], intercept = 0, color = "black", linetype = "dashed") +
   scale_color_manual(values = mypal) + 
-  labs(x = "biomass (grams)",
-       y = "log10 DNA copy number") +
-  xlim(0, 4500) +
-  ylim(0,11)
+  labs(x = "log10(biomass (grams))",
+       y = "log10(DNA copy number)") 
 
 combined %>%
-  ggplot() +
-  geom_point(aes(x=biomass, y=Conc, color = site_name, shape = Species)) +
-  theme_classic() +
-  geom_smooth(aes(x=biomass,y=Conc), formula = y ~ x - 1, color = "black", linetype = "dashed", method = "lm", se = FALSE) +
-  #scale_color_manual(values = mypal) +
-  labs(x = "biomass (grams)",
-       y = "log10 DNA copy number")
+  filter(biomass < 5000) %>%
+  filter(biomass > 0) %>%
+  ggplot() + 
+  geom_point(aes(x=log10(biomass), y=Conc_mean, color = Species), cex = 2) + 
+  geom_errorbar(aes(x=log10(biomass), y=Conc_mean, ymin = Conc_q.025, ymax = Conc_q.975, color = Species), width = 0) +
+  theme_classic() + 
+  scale_color_manual(values = mypal) + 
+  labs(x = "log10(biomass)",
+       y = "log10(DNA copy number)") 
+
+combined %>%
+  filter(biomass < 5000) %>%
+  filter(biomass > 0) %>%
+  ggplot() + 
+  geom_point(aes(x=log10(biomass), y=Conc_median, color = Species), cex = 2) + 
+  geom_errorbar(aes(x=log10(biomass), y=Conc_median, ymin = Conc_q.025, ymax = Conc_q.975, color = Species), width = 0) +
+  theme_classic() + 
+  scale_color_manual(values = mypal) + 
+  labs(x = "log10(biomass)",
+       y = "log10(DNA copy number)") 
+#hmm median looks really weird... 
+
 ```
 
 
+okay, since the species estimates are not independent, plot just one species at a time??? 
 
-the moment of truth.... plot abundance 
 ```{r}
-mypal <- c("#6a6599", "#79af97", "#00a1d5")   #purple, green, blue
-
 combined %>%
+  filter(Species == "Arctic cod") %>%
+  filter(biomass < 5000) %>%
+  filter(biomass > 0) %>%
   ggplot() + 
-  geom_point(aes(x=N, y=Conc, color = Species)) + 
+  geom_point(aes(x=log10(biomass), y=Conc_mean, color = Species), cex = 2) + 
+  geom_errorbar(aes(x=log10(biomass), y=Conc_mean, ymin = Conc_q.025, ymax = Conc_q.975, color = Species), width = 0) +
   theme_classic() + 
-  #geom_smooth(aes(x=N,y=Conc), color = "black", linetype = "dashed", method = "lm", se = FALSE) +
-  scale_color_manual(values = mypal) + 
-  labs(x = "abundance",
-       y = "log10 DNA copy number")
+  scale_color_manual(values = "#6a6599") + 
+  labs(x = "log10(biomass)",
+       y = "log10(DNA copy number)") 
 
 combined %>%
-  ggplot() +
-  geom_point(aes(x=N, y=Conc, color = site_name, shape = Species)) +
-  theme_classic() +
-  #geom_smooth(aes(x=N,y=Conc), color = "black", linetype = "dashed", method = "lm", se = FALSE) +
-  #scale_color_manual(values = mypal) +
-  labs(x = "abundance",
-       y = "log10 DNA copy number")
+  filter(Species == "Pacific cod") %>%
+  filter(biomass < 5000) %>%
+  filter(biomass > 0) %>%
+  ggplot() + 
+  geom_point(aes(x=log10(biomass), y=Conc_mean, color = Species), cex = 2) + 
+  geom_errorbar(aes(x=log10(biomass), y=Conc_mean, ymin = Conc_q.025, ymax = Conc_q.975, color = Species), width = 0) +
+  theme_classic() + 
+  scale_color_manual(values = "#79af97") + 
+  labs(x = "log10(biomass)",
+       y = "log10(DNA copy number)") 
+
+combined %>%
+  filter(Species == "Walleye pollock") %>%
+  filter(biomass < 5000) %>%
+  filter(biomass > 0) %>%
+  ggplot() + 
+  geom_point(aes(x=log10(biomass), y=Conc_mean, color = Species), cex = 2) + 
+  geom_errorbar(aes(x=log10(biomass), y=Conc_mean, ymin = Conc_q.025, ymax = Conc_q.975, color = Species), width = 0) +
+  theme_classic() + 
+  scale_color_manual(values = "#00a1d5") + 
+  labs(x = "log10(biomass)",
+       y = "log10(DNA copy number)") 
+
+fig_onecolor_zoom <- combined %>%
+  filter(biomass < 5000) %>%
+  filter(biomass > 0) %>%
+  ggplot() + 
+  geom_point(aes(x=log10(biomass), y=Conc_mean), cex = 2) + 
+  geom_errorbar(aes(x=log10(biomass), y=Conc_mean, ymin = Conc_q.025, ymax = Conc_q.975), width = 0) +
+  theme_classic() + 
+  scale_color_manual(values = mypal) + 
+  labs(x = "log10(biomass)",
+       y = "log10(DNA copy number)") 
+fig_onecolor_zoom
+
+fig_onecolor <- combined %>%
+  filter(biomass > 0) %>%
+  ggplot() + 
+  geom_point(aes(x=log10(biomass), y=Conc_mean), cex = 2) + 
+  geom_errorbar(aes(x=log10(biomass), y=Conc_mean, ymin = Conc_q.025, ymax = Conc_q.975), width = 0) +
+  theme_classic() + 
+  scale_color_manual(values = mypal) + 
+  labs(x = "log10(biomass)",
+       y = "log10(DNA copy number)") 
+fig_onecolor
+
+```
+
+```{r}
+ggsave("my_figures/bm_cn.png", plot = fig_onecolor, width = 6, height = 4, dpi = 300)
+ggsave("my_figures/bm_cn_zoom.png", plot = fig_onecolor_zoom, width = 6, height = 4, dpi = 300)
 ```
 
 
-maybe looks reasonable for arctic cod and walleye pollock, the species where all individuals in the experiment where approximately the same size/age.  pcod are definitely all over because there are many age/sizes used in tanks... 
+
+```{r}
+#mod3 <- lm(Conc~biomass-1, data = combined)
+#summary(mod3)
+```
+
+```{r}
+#combined_2 <- combined %>%
+#  filter(biomass < 5000)
+#mod3.5 <- lm(10^Conc~biomass-1, data = combined_2)
+#summary(mod3.5)
+```
+
 
 
 okay, i'm curious how a few of the tank variables may be influencing our relationships
@@ -273,154 +415,81 @@ combined$N_spp <- as.factor(combined$N_spp)
 ```
 
 
-```{r}
-mypal <- c("#6a6599", "#79af97", "#00a1d5")   #purple, green, blue
-
-combined %>%
-  ggplot() +
-  geom_point(aes(x=biomass, y=Conc, color = Temp, shape = Species)) +
-  theme_classic() +
-  geom_smooth(aes(x=biomass,y=Conc), color = "black", linetype = "dashed", method = "lm", se = FALSE) +
-  #scale_color_manual(values = mypal) +
-  labs(x = "biomass (grams)",
-       y = "log10 DNA copy number")
-
-combined %>%
-  filter(biomass > 0) %>%
-  ggplot() +
-  geom_point(aes(x=biomass, y=Conc, color = N_spp, shape = Species), alpha = 0.7) +
-  theme_classic() +
-  geom_smooth(aes(x=biomass,y=Conc), color = "black", linetype = "dashed", method = "lm", se = FALSE) +
-  #scale_color_manual(values = mypal) +
-  labs(x = "biomass (grams)",
-       y = "log10 DNA copy number")
-
-combined %>%
-  filter(biomass > 0) %>%
-  ggplot() +
-  geom_point(aes(x=biomass, y=Conc, color = TankTime, shape = Species), alpha = 0.7) +
-  theme_classic() +
-  geom_smooth(aes(x=biomass,y=Conc), color = "black", linetype = "dashed", method = "lm", se = FALSE) +
-  #scale_color_manual(values = mypal) +
-  labs(x = "biomass (grams)",
-       y = "log10 DNA copy number")
-
-combined %>%
-  filter(biomass > 0) %>%
-  ggplot() +
-  geom_point(aes(x=biomass, y=Conc, color = dominate, shape = Species), alpha = 0.7) +
-  theme_classic() +
-  geom_smooth(aes(x=biomass,y=Conc), color = "black", linetype = "dashed", method = "lm", se = FALSE) +
-  scale_color_manual(values = mypal) +
-  labs(x = "biomass (grams)",
-       y = "log10 DNA copy number")
-
-combined %>%
-  filter(biomass > 0) %>%
-  ggplot() +
-  geom_point(aes(x=biomass, y=Conc, color = WP_Fbiomass, shape = Species), alpha = 0.7) +
-  #geom_text(aes(x=biomass, y=Conc, label = site_name)) +
-  theme_classic() +
-  geom_smooth(aes(x=biomass,y=Conc), color = "black", linetype = "dashed", method = "lm", se = FALSE) +
-  scale_color_gradient2(low = "darkgreen", mid = "grey", high = "purple", midpoint = 0.5, limits = c(0, 1), breaks = c(0.25, 0.5, 0.75)) +
-  labs(x = "biomass (grams)",
-       y = "log10 DNA copy number")
-
-combined %>%
-  filter(biomass > 0) %>%
-  mutate(low_WP = ifelse(WP_Fbiomass < 0.3, "WP<0.3", "WP>=0.3")) %>%
-  ggplot() +
-  geom_point(aes(x=biomass, y=Conc, color = low_WP, shape = Species)) +
-  #geom_point(aes(x=biomass, y=Conc, label = site_name)) +
-  theme_classic() +
-  geom_smooth(aes(x=biomass,y=Conc, color = low_WP), linetype = "dashed", method = "lm", se = FALSE) +
-  labs(x = "biomass (grams)",
-       y = "log10 DNA copy number")
-
-combined %>%
-  filter(biomass > 0) %>%
-  mutate(low_WP = ifelse(WP_Fbiomass < 0.5, "WP<0.5", "WP>=0.5")) %>%
-  ggplot() +
-  geom_point(aes(x=biomass, y=Conc, color = low_WP, shape = Species)) +
-  #geom_point(aes(x=biomass, y=Conc, label = site_name)) +
-  theme_classic() +
-  geom_smooth(aes(x=biomass,y=Conc, color = low_WP), linetype = "dashed", method = "lm", se = FALSE) +
-  labs(x = "biomass (grams)",
-       y = "log10 DNA copy number")
-```
-
-
 make a nicer version of figure
 ```{r}
 library(viridis)
 
-combined %>%
-  filter(biomass > 0) %>%
-  ggplot() +
-  geom_point(aes(x=biomass, y=Conc, color = WP_Fbiomass, shape = Species)) +
-  theme_classic() +
-  #geom_smooth(aes(x=biomass,y=Conc), formula = y ~ x - 1, color = "black", linetype = "dashed", method = "lm", se = FALSE) +
-  geom_abline(slope = coef(mod3)[1], intercept = 0, color = "black", linetype = "dashed") +
-  scale_color_viridis() +
-  #scale_color_gradient2(low = "darkgreen", mid = "darkgrey", high = "purple", midpoint = 0.5, limits = c(0, 1), breaks = c(0.25, 0.5, 0.75)) +
-  labs(x = "biomass (grams)",
-       y = "log10 DNA copy number",
-       color = "Proportion of Walleye pollock biomass")
-
-combined %>%
+fig_gradient <- combined %>%
   filter(biomass > 0) %>%
   #filter(biomass < 5500) %>%
   ggplot() +
-  geom_point(aes(x=biomass, y=Conc, color = WP_Fbiomass, shape = Species)) +
+  geom_point(aes(x=log10(biomass), y=Conc_mean, color = WP_Fbiomass, shape = Species), cex = 2) + 
+  geom_errorbar(aes(x=log10(biomass), y=Conc_mean, ymin = Conc_q.025, ymax = Conc_q.975, color = WP_Fbiomass), width = 0) +
+  theme_classic() +
   scale_color_viridis() +
-  theme_classic() +
-  #geom_smooth(aes(x=biomass,y=Conc), formula = y ~ x - 1, color = "black", linetype = "dashed", method = "lm", se = FALSE) +
-  geom_abline(slope = coef(mod3)[1], intercept = 0, color = "black", linetype = "dashed") +
   #scale_color_gradient2(low = "darkgreen", mid = "darkgrey", high = "purple", midpoint = 0.5, limits = c(0, 1), breaks = c(0.25, 0.5, 0.75)) +
-  labs(x = "biomass (grams)",
-       y = "log10 DNA copy number",
-       color = "Proportion of Walleye pollock biomass") +
-  xlim(0, 4500) +
-  ylim(0,11)
+  labs(x = "log10(biomass)",
+       y = "log10(DNA copy number)",
+       color = "Proportion of Walleye pollock biomass")
+fig_gradient 
 
-combined %>%
-  filter(biomass > 0) %>%
-  filter(biomass < 5500) %>%
-  ggplot() +
-  geom_point(aes(x=biomass, y=Conc, color = Species)) +
-  theme_classic() +
-  scale_color_manual(values = mypal) + 
-  geom_smooth(aes(x=biomass,y=Conc, color = Species), formula = y ~ x - 1, linetype = "dashed", method = "lm", se = FALSE) +
-  #scale_color_gradient2(low = "darkgreen", mid = "darkgrey", high = "purple", midpoint = 0.5, limits = c(0, 1), breaks = c(0.25, 0.5, 0.75)) +
-  labs(x = "biomass (grams)",
-       y = "log10 DNA copy number")
+# combined %>%
+#   filter(biomass > 0) %>%
+#   filter(biomass < 5500) %>%
+#   ggplot() +
+#   geom_point(aes(x=log10(biomass), y=Conc_mean, color = Species), cex = 2) + 
+#   geom_errorbar(aes(x=log10(biomass), y=Conc_mean, ymin = Conc_q.025, ymax = Conc_q.975, color = Species), width = 0) +
+#   theme_classic() +
+#   scale_color_manual(values = mypal) + 
+#   geom_smooth(aes(x=log10(biomass), y=Conc_mean, color = Species), formula = y ~ x - 1, linetype = "dashed", method = "lm", se = FALSE) +
+#   #scale_color_gradient2(low = "darkgreen", mid = "darkgrey", high = "purple", midpoint = 0.5, limits = c(0, 1), breaks = c(0.25, 0.5, 0.75)) +
+#   labs(x = "log10(biomass)",
+#        y = "log10 DNA copy number")
 
-combined %>%
+# low <- combined %>%
+#   filter(biomass > 0) %>%
+#   filter(biomass < 5500) %>%
+#   filter(WP_Fbiomass < 0.3)
+# 
+# high <- combined %>%
+#   filter(biomass > 0) %>%
+#   filter(biomass < 5500) %>%
+#   filter(WP_Fbiomass >= 0.3)
+
+#low_mod <- lm(Conc~biomass-1, data = low)
+#summary(low_mod)
+#high_mod <- lm(Conc~biomass-1, data = high)
+#summary(high_mod)
+
+fig_binary <- combined %>%
   filter(biomass > 0) %>%
-  filter(biomass < 5500) %>%
-  mutate(low_WP = ifelse(WP_Fbiomass < 0.3, "WP<0.3", "WP>=0.3")) %>%
+  #filter(biomass < 5500) %>%
+  mutate(low_WP = ifelse(WP_Fbiomass < 0.3, "<0.3", ">=0.3")) %>%
   ggplot() +
-  geom_point(aes(x=biomass, y=Conc, color = low_WP, shape = Species)) +
+  geom_point(aes(x=log10(biomass), y=Conc_mean, color = low_WP, shape = Species), cex = 2) + 
+  geom_errorbar(aes(x=log10(biomass), y=Conc_mean, ymin = Conc_q.025, ymax = Conc_q.975, color = low_WP), width = 0) +
   scale_color_manual(values = c("lightblue", "darkblue")) +
   theme_classic() +
-  geom_smooth(aes(x=biomass,y=Conc, color = low_WP), formula = y ~ x - 1, linetype = "dashed", method = "lm", se = FALSE) +
-  labs(x = "biomass (grams)",
-       y = "log10 DNA copy number",
+  #geom_smooth(aes(x=biomass,y=Conc, color = low_WP), formula = y ~ x - 1, linetype = "dashed", method = "lm", se = FALSE) +
+  labs(x = "log10(biomass)",
+       y = "log10(DNA copy number)",
        color = "Proportion of Walleye pollock biomass")
+fig_binary 
 ```
 
 
-if i say that there is a cut-off for WP being at least 30% of the species composition, how does the linear model do?
 ```{r}
-summary(mod3)
-
-wp_over30p <- combined %>%
-  filter(WP_Fbiomass > 0.3) 
-
-mod4 <- lm(Conc~biomass, data = wp_over30p)
-summary(mod4)
+ggsave("my_figures/bm_cn_wp_gradient.png", plot = fig_gradient, width = 8, height = 4, dpi = 300)
+ggsave("my_figures/bm_cn_wp_binary.png", plot = fig_binary, width = 8, height = 4, dpi = 300)
 ```
 
-r2 not much different... 
 
+```{r, fig.width=10, fig.height=4}
+library(patchwork)
 
+combined_fig <- fig_gradient + fig_binary + 
+  #plot_layout(guides = 'collect') + 
+  plot_annotation(tag_levels = 'A') &
+    theme(plot.tag = element_text(face = 'bold'))
+combined_fig
+```

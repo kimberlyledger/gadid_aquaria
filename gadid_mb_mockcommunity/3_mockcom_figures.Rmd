@@ -22,6 +22,7 @@ load("/home/kimberly.ledger/gadid_aquaria/gadid_mb_mockcommunity/quant_outputs/m
 mock1 <- Output
 ```
 
+
 ```{r}
 #########################################################
 # Raw estimates from Reads

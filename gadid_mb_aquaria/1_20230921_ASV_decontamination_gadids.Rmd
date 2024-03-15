@@ -65,20 +65,30 @@ nrow(asv_table)
 ```
 Before diving into the decontamination steps, let's get a feel for what the data look like. 
 
-### positive controls 
-
 add column to the ASV table that labels the sample type
 ```{r}
 asv_table_with_sample_type <- metadata %>%
   filter(MiSeq_run == "B") %>%
-  dplyr::select(Sample_ID, sample_type) %>%
-  left_join(asv_table, by = "Sample_ID")
+  dplyr::select(Sample_ID, sample_type, project) %>%
+  left_join(asv_table, by = "Sample_ID") %>%
+  filter(project == "aquaria")
 ```
 
+remove asv columns that have no reads 
+```{r}
+# Identify columns with sums not equal to 0
+non_zero_sum_cols <- colSums(asv_table_with_sample_type[,4:382]) != 0
+
+# Subset the dataframe to keep only columns with non-zero sums
+asv_table_with_sample_type <- asv_table_with_sample_type[, non_zero_sum_cols]
+```
+
+
+### positive controls 
 let's start by visualizing the reads in the positive control samples 
 ```{r}
 asv_table_with_sample_type %>%
-  pivot_longer(cols = c(3:381), names_to = "ASV", values_to = "reads") %>%
+  pivot_longer(cols = c(4:145), names_to = "ASV", values_to = "reads") %>%
   filter(sample_type == "positive") %>%
   ggplot(aes(x=Sample_ID, y=reads, fill=ASV)) +
   geom_bar(stat = "identity") + 
@@ -99,7 +109,7 @@ asv_table_with_sample_type %>%
 top asvs in positive controls
 ```{r}
 asvs_PC <- asv_table_with_sample_type %>%
-  pivot_longer(cols = c(3:381), names_to = "ASV", values_to = "reads") %>%
+  pivot_longer(cols = c(4:145), names_to = "ASV", values_to = "reads") %>%
   filter(sample_type == "positive") %>%
   group_by(ASV) %>%
   summarise(total = sum(reads)) %>%
@@ -113,7 +123,7 @@ head(asvs_PC, 10)
 let me look into the reads that got into the field blanks
 ```{r}
 asv_table_with_sample_type %>%
-  pivot_longer(cols = c(3:381), names_to = "ASV", values_to = "reads") %>%
+  pivot_longer(cols = c(4:145), names_to = "ASV", values_to = "reads") %>%
   filter(sample_type == "field_blank") %>%
   ggplot(aes(x=Sample_ID, y=reads, fill=ASV)) +
   geom_bar(stat = "identity") + 
@@ -133,7 +143,7 @@ asv_table_with_sample_type %>%
 
 ```{r}
 asvs_FN <- asv_table_with_sample_type %>%
-  pivot_longer(cols = c(3:381), names_to = "ASV", values_to = "reads") %>%
+  pivot_longer(cols = c(4:145), names_to = "ASV", values_to = "reads") %>%
   filter(sample_type == "field_blank") %>%
   group_by(ASV) %>%
   summarise(total = sum(reads)) %>%
@@ -148,7 +158,7 @@ head(asvs_FN, 10)
 let me look into the reads that got into the extraction blanks
 ```{r}
 asv_table_with_sample_type %>%
-  pivot_longer(cols = c(3:381), names_to = "ASV", values_to = "reads") %>%
+  pivot_longer(cols = c(4:145), names_to = "ASV", values_to = "reads") %>%
   filter(sample_type == "extraction_blank") %>%
   ggplot(aes(x=Sample_ID, y=reads, fill=ASV)) +
   geom_bar(stat = "identity") + 
@@ -168,7 +178,7 @@ asv_table_with_sample_type %>%
 
 ```{r}
 asvs_EC <- asv_table_with_sample_type %>%
-  pivot_longer(cols = c(3:381), names_to = "ASV", values_to = "reads") %>%
+  pivot_longer(cols = c(4:145), names_to = "ASV", values_to = "reads") %>%
   filter(sample_type == "extraction_blank") %>%
   group_by(ASV) %>%
   summarise(total = sum(reads)) %>%
@@ -183,7 +193,7 @@ head(asvs_EC, 10)
 let me look into the reads that got into the pcr blanks
 ```{r}
 asv_table_with_sample_type %>%
-  pivot_longer(cols = c(3:381), names_to = "ASV", values_to = "reads") %>%
+  pivot_longer(cols = c(4:145), names_to = "ASV", values_to = "reads") %>%
   filter(sample_type == "PCR_blank") %>%
   ggplot(aes(x=Sample_ID, y=reads, fill=ASV)) +
   geom_bar(stat = "identity") + 
@@ -203,7 +213,7 @@ asv_table_with_sample_type %>%
 
 ```{r}
 asvs_PCRN <- asv_table_with_sample_type %>%
-  pivot_longer(cols = c(3:381), names_to = "ASV", values_to = "reads") %>%
+  pivot_longer(cols = c(4:145), names_to = "ASV", values_to = "reads") %>%
   filter(sample_type == "PCR_blank") %>%
   group_by(ASV) %>%
   summarise(total = sum(reads)) %>%
@@ -247,7 +257,7 @@ identify the maximum proportion of reads for each ASV found in the positive cont
 ```{r}
 prop_asvs_in_positives <- asv_table_with_sample_type %>%
   filter(sample_type == "positive") %>%
-  pivot_longer(cols = c(3:381), names_to = "ASV", values_to = "reads") %>%
+  pivot_longer(cols = c(4:145), names_to = "ASV", values_to = "reads") %>%
   group_by(Sample_ID) %>%
   mutate(TotalReadsPerSample = sum(reads)) %>%
   mutate(Prop = reads/TotalReadsPerSample) %>%
@@ -258,7 +268,7 @@ prop_asvs_in_positives <- asv_table_with_sample_type %>%
 let's plot the max proportion of reads for each ASV found in the positive controls vs the abundance of reads for that ASV (total) 
 ```{r}
 reads_per_asv <-  asv_table_with_sample_type %>%
-  pivot_longer(cols = c(3:381), names_to = "ASV", values_to = "reads") %>%
+  pivot_longer(cols = c(4:145), names_to = "ASV", values_to = "reads") %>%
   group_by(ASV) %>%
   summarise(TotalReadsPerASV = sum(reads))
 
@@ -274,7 +284,7 @@ ggplot(for_plot, aes(x = TotalReadsPerASV, y = max_prop)) +
 subtract the max proportion of tag-jumped reads for each ASV from all samples
 ```{r}
 indexhop_table <- asv_table_with_sample_type %>%
-  pivot_longer(cols = c(3:381), names_to = "ASV", values_to = "reads") %>%
+  pivot_longer(cols = c(4:145), names_to = "ASV", values_to = "reads") %>%
   group_by(Sample_ID) %>%
   mutate(TotalReadsPerSample = sum(reads)) %>%
   left_join(prop_asvs_in_positives, by = "ASV") %>%
@@ -450,7 +460,7 @@ nrow(replicates_removed_2)
 plot them
 ```{r}
 replicates_removed_2 %>%
-  pivot_longer(cols = c(3:353), names_to = "ASV", values_to = "count") %>%
+  pivot_longer(cols = c(4:49), names_to = "ASV", values_to = "count") %>%
 ggplot(aes(x=Sample_ID, y=count, fill=ASV)) +
   geom_bar(stat = "identity") + 
     theme_bw() + 
@@ -494,7 +504,7 @@ it may be useful to store a list of the samples removed during decontamination s
 samples_removed_2 <- replicates_removed_2 %>%
   #filter(sample_type == "sample") %>%
   select(Sample_ID)
-#write.csv(samples_removed_2, "20230921_decontamination_step3.csv")
+write.csv(samples_removed_2, "20230921_decontamination_step3.csv")
 ```
 
 any ASV's with no reads? 
@@ -504,7 +514,6 @@ asvs_toremove <- asv_table_filter3 %>%
   summarise(total = sum(reads)) %>%
   filter(total == 0)
 ```
-
 
 filter the data frame 
 ```{r}
@@ -516,6 +525,11 @@ did we lose any ASVs during this step?
 ```{r}
 length(unique(asv_table_filter3$ASV)) 
 ```
+number of replicate remaining 
+```{r}
+length(unique(asv_table_filter3$Sample_ID)) 
+```
+
 
 # 4. Hierarchical Occupancy Modeling 
 
@@ -682,14 +696,14 @@ temp.df <- occu_df_subset
                              iter = 4000   #number of iterations per chain
        )
        
-  myHierarchicalStanResults <- tidy(tibble(as.data.frame(myHierarchicalModel)))
+  myHierarchicalStanResults_20240313 <- tidy(tibble(as.data.frame(myHierarchicalModel)))
   
-  #write_rds(myHierarchicalStanResults, "20230921_MiSeqrun_occupancy_output_20231030.rds")
+  write_rds(myHierarchicalStanResults_20240313, "20230921_MiSeqrun_occupancy_output_20240313.rds")
 ```
 
 
 ```{r}
-myHierarchicalStanResults <- read_rds("20230921_MiSeqrun_occupancy_output_20231030.rds")
+myHierarchicalStanResults <- read_rds("20230921_MiSeqrun_occupancy_output_20240313.rds")
 
   ## occupancy probabilities 
   myHierarchicalStanResults_occu <- myHierarchicalStanResults %>%
@@ -715,10 +729,10 @@ site.asv_occupancy_probs <- pattern.of.presense %>%
   left_join(occu_with_key_to_join)
 
 keepers <- site.asv_occupancy_probs %>%
-  filter(max_Occupancy_prob >= 0.8) %>%
+  filter(max_Occupancy_prob >= 0.7) %>%
   unite(combined_column, ASV, col = 'filter_id', sep = '.', remove = F)
 discard <- site.asv_occupancy_probs %>%
-  filter(max_Occupancy_prob < 0.8)
+  filter(max_Occupancy_prob < 0.7)
 ```
 
 
@@ -767,10 +781,10 @@ asv_table_filter4 %>%
 let's get rid of samples with no/few reads. 
 
 ```{r}
-remove_5 <- c("e02528-A", "e02565-C", "e02593-A", "e02538-B")
+#remove_5 <- c("e02528-A", "e02565-C", "e02593-A", "e02538-B")
 
-asv_table_filter4 <- asv_table_filter4 %>%
-  filter(!Sample_ID %in% remove_5)
+#asv_table_filter4 <- asv_table_filter4 %>%
+#  filter(!Sample_ID %in% remove_5)
 ```
 
 instead of filtering by the biological replicates, i need to filter by the unique extractions.  the 'dist_to_centroid' function later on doesn't like the different number of replicates or that there are so many for a few.. not sure exactly. 
@@ -781,11 +795,10 @@ onerep <- asv_table_filter4  %>%
   group_by(extraction_ID) %>%
   summarise(nrep = n_distinct(Sample_ID)) %>%
   #filter(nrep == 2) 
-  filter(nrep == 1) # there are many
+  filter(nrep == 1)
 ```
 
 remove the extraction with only one pcr rep from the data frame
-
 ```{r}
 temp_table <-asv_table_filter4 %>%
   filter(!extraction_ID %in% onerep$extraction_ID)
@@ -843,7 +856,6 @@ as_tibble(subset(melt(as.matrix(all.distances.full)))) -> all.distances.melted
 summary(is.na(all.distances.melted$value))
 
 # Now, create a three variables for all distances, they could be PCR replicates, BIOL replicates, or from the same site
-
 all.distances.melted %>%
   separate (X1, into = "Bottle1", sep = "\\-", remove = FALSE) %>%
   separate (Bottle1, into = "Site1", remove = FALSE) %>%
@@ -860,9 +872,7 @@ all.distances.melted %>%
   filter (Sample1 != Sample2) -> all.distances.to.plot
 
 # Checking all went well
-
 sapply(all.distances.to.plot, function(x) summary(is.na(x)))
-
 ```
 
 ```{r}
@@ -928,7 +938,7 @@ calculate normal distribution of distances to centroid
 ```{r}
 normparams <- MASS::fitdistr(all_distances$distances, "normal")$estimate                                      
 probs <- pnorm(all_distances$distances, normparams[1], normparams[2])
-outliers_centroid <- which(probs>0.95)
+outliers_centroid <- which(probs>0.99)
 
 discard_centroid <- all_distances$distances_id[outliers_centroid]
 discard_centroid
@@ -948,7 +958,7 @@ which extraction IDs were removed??
 to_discard <- data.frame(discard_centroid) %>%
   separate(discard_centroid, into = c("tank_ID", "alt_ID", "rep_ID"))
 
-#write.csv(to_discard, "20230921_pcr_outliers.csv")
+write.csv(to_discard, "20230921_pcr_outliers.csv")
 
 removed_step5 <- temp_table %>%
   filter(alt_ID %in% to_discard$alt_ID)
@@ -1022,23 +1032,6 @@ asv_table_filter5 %>%
   )  
 ```
 
-**Station DBO2.1**
-```{r}
-asv_table_filter5 %>%
-  group_by(Sample_ID) %>%
-  mutate(sum=sum(reads)) %>%
-  mutate(prop = reads/sum) %>%
-  filter(station_ID == "DBO2.1") %>%
-  ggplot(aes(x=Sample_ID, y=prop, fill=ASV)) +
-  geom_bar(stat = "identity") + 
-  facet_wrap(~extraction_ID, scales = 'free', ncol = 3) +
-  theme_bw() + 
-  theme(
-    axis.text.x = element_text(angle = 90, hjust = 0.95),
-    legend.position = "none",
-    legend.title = element_blank()
-  )  
-```
 
 okay, for this dataset I will NOT include decontamintion step 5. 
 
@@ -1047,10 +1040,13 @@ how many ASV's do we have in our post-decontamination dataset
 ```{r}
 length(unique(asv_table_filter4$ASV))
 ```
-
-save the post-decontamination table 
+how many replicates do we have in our post-decontamination dataset 
 ```{r}
-#write.csv(asv_table_filter4, "20230921_decontamination_output_20231030.csv", row.names = FALSE)
+length(unique(asv_table_filter4$Sample_ID))
 ```
 
 
+save the post-decontamination table 
+```{r}
+#write.csv(asv_table_filter4, "20230921_decontamination_output_20240313.csv", row.names = FALSE)
+```

@@ -6,7 +6,7 @@ output: github_document
 ---
 
 - analysis of gadid sequences from 20230918 sequencing run    
-- this script uses decontaminated read counts from my 20230922 run of the "1_ASV_decontamination.Rmd" 
+- this script uses decontaminated read counts from my 20240313 run of the "1_ASV_decontamination.Rmd" 
 - this script uses the blastn taxonomic id's using the script "blastn_taxonomy.Rmd" from eDNA_metabarcoding - file was saved here: "/genetics/edna/workdir/gadids/20230918_aquaria/trimmed/filtered/outputs/asv_taxonomy_blastn.csv"
 
 ```{r setup, include=FALSE}
@@ -21,7 +21,7 @@ library(tidyverse)
 
 read in decontaminated sample table
 ```{r}
-decontam_reads <- read.csv("/home/kimberly.ledger/gadid_aquaria/gadid_mb_aquaria/20230918_decontamination_output_20231030.csv") %>%
+decontam_reads <- read.csv("/home/kimberly.ledger/gadid_aquaria/gadid_mb_aquaria/20230918_decontamination_output_20240313.csv") %>%
   #select(!sample_type) %>%   ## clean-up this table - remove irrelevant columns 
   dplyr::select(!loc.asv)
 
@@ -67,9 +67,30 @@ ASV92 = 96.4% G. morhua
 
 need to manually add ID for a few ASVs
 ```{r}
-decontam_asvs[34,] <- c("ASV19", "Gadus macrocephalus", "species")
-decontam_asvs[35,] <- c("ASV20", "Gadus chalcogrammus", "species")
-decontam_asvs[36,] <- c("ASV27", "Gadus chalcogrammus", "species")
+decontam_asvs[43,] <- c("ASV19", "Gadus macrocephalus", "species")
+decontam_asvs[44,] <- c("ASV20", "Gadus chalcogrammus", "species")
+decontam_asvs[45,] <- c("ASV27", "Gadus chalcogrammus", "species")
+```
+
+take a closer look at what each ASV contributes
+```{r}
+decontam_reads %>%
+  left_join(decontam_asvs, by = "ASV") %>%
+  filter(is.na(taxon)) %>%
+  group_by(ASV) %>%
+  summarize(total_reads = sum(reads))
+
+wp <- decontam_reads %>%
+  left_join(decontam_asvs, by = "ASV") %>%
+  filter(taxon == "Gadus chalcogrammus") %>%
+  group_by(ASV) %>%
+  summarize(total_reads = sum(reads)) %>%
+  mutate(all_spp = sum(total_reads),
+         prop_reads = total_reads/all_spp) %>%
+  arrange(desc(prop_reads)) 
+
+temp <- wp[-c(1:4),] 
+sum(temp$prop_reads)
 ```
 
 
@@ -84,7 +105,7 @@ join <- decontam_reads %>%
 
 output reads with taxonomic ID table
 ```{r}
-#write.csv(join, "/home/kimberly.ledger/gadid_aquaria/gadid_mb_aquaria/20230918_taxon_reads.csv")
+#write.csv(join, "20230918_taxon_reads.csv")
 ```
 
 ```{r}

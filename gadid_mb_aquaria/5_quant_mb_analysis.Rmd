@@ -16,10 +16,14 @@ select <- dplyr::select
 
 # Read in the stan model outputs 
 ```{r}
-load("/home/kimberly.ledger/gadid_aquaria/gadid_mb_aquaria/quant_mb_outputs/raw_20231101.Rdata")
+#load("/home/kimberly.ledger/gadid_aquaria/gadid_mb_aquaria/quant_mb_outputs/raw_20231101.Rdata")
+load("/home/kimberly.ledger/gadid_aquaria/gadid_mb_aquaria/quant_mb_outputs/raw_20240313.Rdata.Rdata")
 raw <- Output
+
+#load("/home/kimberly.ledger/gadid_aquaria/gadid_mb_aquaria/quant_mb_outputs/mock_20240313.Rdata")
 load("/home/kimberly.ledger/gadid_aquaria/gadid_mb_aquaria/quant_mb_outputs/mock_20231102.Rdata")
-mock1 <- Output 
+#mock1 <- Output 
+mock1 <- Output_mock
 ```
 
 ```{r}
@@ -111,7 +115,7 @@ metadata <- read.csv("/home/kimberly.ledger/gadid_aquaria/gadid_mb_aquaria/gadid
   select(!Sample_ID) %>%
   select(!pcr_replicate) %>%
   select(!project) %>%
-  rename(community = extraction_ID) %>%
+  dplyr::rename(community = extraction_ID) %>%
   unique()
 ```
 
@@ -322,20 +326,19 @@ how many replicates does each tank have?
 result.join %>%
   group_by(tank_ID) %>%
   summarise(nrep = n_distinct(community)) %>%
-  filter(nrep == 2)  # there are two (51 and 59) 
-  #filter(nrep == 1) # there are none!  
+  #filter(nrep == 2)  # there are two (51 and 59) 
+  filter(nrep == 1) # there is one 
 ```
 
 remove the tanks with only one pcr rep from the data frame
 ```{r}
-#result.temp <- result.join %>%
-#  filter(tank_ID != 51) %>%
-#  filter(tank_ID != 59)
+result.temp <- result.join %>%
+  filter(tank_ID != 54)
 ```
 
 first, i'll calculate an eDNA index for the mock1.mean (this normalization doesn't really change the prop that much...)
 ```{r}
-normalized <- result.join %>%
+normalized <- result.temp %>%
   dplyr::group_by(Species) %>%
   mutate(Colmax = max(mock1.mean, na.rm = TRUE),     ## update with simple, mock, or raw mean
          Normalized_reads = mock1.mean/Colmax)
@@ -400,18 +403,22 @@ sapply(all.distances.to.plot, function(x) summary(is.na(x)))
 ```{r}
 all.distances.to.plot$Distance.type <- all.distances.to.plot$Distance.type  %>% fct_relevel("Biological Replicates", "Same Tank")
 
-ggplot (all.distances.to.plot) +
+myplot <- ggplot (all.distances.to.plot) +
   geom_histogram (aes (fill = Distance.type, x = value, after_stat(ndensity)), position = "dodge",  alpha = 0.9, bins = 50) +
   facet_wrap( ~ Distance.type) +
   theme_bw() +
   labs (x = "Pairwise dissimilarity", y = "Density" ,
         Distance.type = "Distance") +
     guides (fill = "none")
-
-  #ggsave("visual.anova.png", dpi = "retina")
+myplot
 ```
 
 cool, samples from the same tank are usually quite similar. 
+
+```{r}
+#ggsave("figures/tank_pairwise_dissimiarlity.png", plot = myplot, width = 8.5, height = 5, dpi = 300)
+```
+
 
 summarize pairwise dissimilarity results 
 ```{r}
@@ -436,7 +443,7 @@ pairwise
 ```
 
 ```{r}
-#write.csv(pairwise, "tank_dissimilarity/pairwise_raw_tank_dissimilarity.csv", row.names = F)
+write.csv(pairwise, "pairwise_mock_tank_dissimilarity.csv", row.names = F)
 ```
 
 

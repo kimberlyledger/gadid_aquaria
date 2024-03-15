@@ -11,11 +11,13 @@ this code is just a cleaned up version of the "7_mb_estimates_v_truth.Rmd"
 library(tidyverse)
 library(ggplot2)
 select <- dplyr::select
+rename <- dplyr::rename
 ```
 
 read in tank estimates
 ```{r}
-tanks_long <- read.csv("/home/kimberly.ledger/gadid_aquaria/gadid_mb_aquaria/tank_mock_estimates.csv") %>%
+tanks_long <- read.csv("/home/kimberly.ledger/gadid_aquaria/gadid_mb_aquaria/tank_raw_estimates.csv") %>%
+#tanks_long <- read.csv("/home/kimberly.ledger/gadid_aquaria/gadid_mb_aquaria/tank_mock_estimates.csv") %>%
   mutate(Species = ifelse(Species == "Boreogadus saida", "AC", Species),
          Species = ifelse(Species == "Gadus chalcogrammus", "WP", Species),
          Species = ifelse(Species == "Gadus macrocephalus", "PC", Species))
@@ -38,6 +40,15 @@ all_long <- metadata %>%
   left_join(tanks_long, by = c("tank_ID", "Species"))
 ```
 
+calculate false positive rates
+```{r}
+all_long %>%
+  filter(Fish_pres == 1) %>%
+  mutate(reads_present = ifelse(Mean > 0.005, "yes", "no")) %>%
+  filter(reads_present == "yes") %>%
+  filter(Fbiomass == 0)
+```
+
 calculate abundance 
 ```{r}
 all_long_abundance <- metadata %>%
@@ -55,13 +66,14 @@ all_long_abundance <- metadata %>%
 ```
 
 
+
 plot biomass and color by species - only including samples with fish present 
 ```{r}
 mypal <- c("#6a6599", "#79af97", "#00a1d5")   #purple, green, blue
 
 fig_biomass <- all_long %>%
-  filter(n.tank.dissim != "2") %>%
   filter(Fish_pres == "1") %>%
+  filter(n.tank.dissim == "0") %>%
   mutate(Species = ifelse(Species == "AC", "Arctic cod", Species)) %>%
   mutate(Species = ifelse(Species == "PC", "Pacific cod", Species)) %>%
   mutate(Species = ifelse(Species == "WP", "Walleye pollock", Species)) %>%
@@ -69,7 +81,8 @@ fig_biomass <- all_long %>%
   geom_errorbar(aes(x=Fbiomass,ymin=q.025,ymax=q.975,color=Species),width=0, size = .5) +
   geom_point(aes(x=Fbiomass,y=Mean,color=Species), size = 2) +
   #geom_smooth(aes(x=Fbiomass,y=Mean,color=Species), method = "lm", se = FALSE) +
-  geom_smooth(aes(x=Fbiomass,y=Mean), color = "black", linetype = "dashed", method = "lm", se = FALSE) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "black")  + 
+  #geom_smooth(aes(x=Fbiomass,y=Mean), color = "black", linetype = "dashed", method = "lm", se = FALSE) +
   scale_color_manual(values = mypal) + 
   theme_classic() + 
   labs(x = "proportional biomass",
@@ -82,14 +95,15 @@ fig_biomass
 ```
 
 ```{r}
-ggsave("figures/read_biomass.png", plot = fig_biomass, width = 8.5, height = 6, dpi = 300)
+#ggsave("figures/read_biomass.png", plot = fig_biomass, width = 8.5, height = 6, dpi = 300)
+ggsave("figures/raw_read_biomass.png", plot = fig_biomass, width = 8.5, height = 6, dpi = 300)
 ```
 
 
 plot abundance 
 ```{r}
 fig_abund <- all_long_abundance %>%
-  filter(n.tank.dissim != "2") %>%
+  filter(n.tank.dissim == "0") %>%
   filter(Fish_pres == "1") %>%
   mutate(Species = ifelse(Species == "AC", "Arctic cod", Species)) %>%
   mutate(Species = ifelse(Species == "PC", "Pacific cod", Species)) %>%
@@ -98,7 +112,8 @@ fig_abund <- all_long_abundance %>%
   geom_errorbar(aes(x=F_Abundance,ymin=q.025,ymax=q.975,color=Species),width=0, size = 0.5) +
   geom_point(aes(x=F_Abundance,y=Mean,color=Species), size = 2) +
   #geom_smooth(aes(x=F_Abundance,y=Mean,color=Species,fill=Species), method = "lm", se = FALSE, alpha = 0.5) +
-  geom_smooth(aes(x=F_Abundance,y=Mean), color = "black", linetype = "dashed",method = "lm", se = FALSE) +
+  #geom_smooth(aes(x=F_Abundance,y=Mean), color = "black", linetype = "dashed",method = "lm", se = FALSE) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "black")  + 
   scale_color_manual(values = mypal) + 
   theme_classic() + 
   labs(x = "proportional abundance",
@@ -111,7 +126,8 @@ fig_abund
 ```
 
 ```{r}
-ggsave("figures/read_abund.png", plot = fig_abund, width = 8.5, height = 6, dpi = 300)
+#ggsave("figures/read_abund.png", plot = fig_abund, width = 8.5, height = 6, dpi = 300)
+ggsave("figures/raw_read_abund.png", plot = fig_abund, width = 8.5, height = 6, dpi = 300)
 ```
 
 
@@ -125,7 +141,8 @@ combined_fig
 ```
 
 ```{r}
-ggsave("figures/biomass_abund.png", plot = combined_fig, width = 10, height = 4, dpi = 300)
+#ggsave("figures/biomass_abund.png", plot = combined_fig, width = 10, height = 4, dpi = 300)
+ggsave("figures/raw_biomass_abund.png", plot = combined_fig, width = 10, height = 4, dpi = 300)
 ```
 
 
@@ -150,7 +167,7 @@ summary(mod_all_N)
 make individual plots for each species on their own - using 1:1 line 
 ```{r}
 fig_abund_PC_age <- all_long_abundance %>%
-  filter(n.tank.dissim != "2") %>%
+  filter(n.tank.dissim == "0") %>%
   filter(Fish_pres == "1") %>%
   mutate(Species = ifelse(Species == "AC", "Arctic cod", Species)) %>%
   mutate(Species = ifelse(Species == "PC", "Pacific cod", Species)) %>%
@@ -185,7 +202,7 @@ ggsave("figures/read_abund_PC_age.png", plot = fig_abund_PC_age, width = 8.5, he
 plot abundance - with biomass scale 
 ```{r}
 temp <- all_long_abundance %>%
-  filter(n.tank.dissim != "2") %>%
+  filter(n.tank.dissim == "0") %>%
   filter(Fish_pres == "1") %>%
   mutate(AC_grams_per_N = AC_biomass/AC_N) %>%
   mutate(PC_grams_per_N = PC_biomass/PC_N) %>%
@@ -217,6 +234,8 @@ fig_abund_w_ind_biomass <- temp %>%
   labs(x = "proportional abundance",
        y = "eDNA read proportion",
        fill = "grams per individual") +
+  scale_x_continuous(limits = c(0, 1)) +
+  scale_y_continuous(limits = c(0, 1)) + 
   #theme(axis.text = element_text(size = 12),
   #      axis.title = element_text(size = 14),
   #      legend.text = element_text(size = 12),
@@ -233,7 +252,7 @@ ggsave("figures/read_abund_PCOD_biomass.png", plot = fig_abund_w_ind_biomass, wi
 
 ```{r}
 temp2 <- all_long %>%
-  filter(n.tank.dissim != "2") %>%
+  filter(n.tank.dissim == "0") %>%
   filter(Fish_pres == "1") %>%
   mutate(AC_grams_per_N = AC_biomass/AC_N) %>%
   mutate(PC_grams_per_N = PC_biomass/PC_N) %>%
@@ -265,6 +284,8 @@ fig_biomass_w_ind_biomass <- temp2 %>%
   labs(x = "proportional biomass",
        y = "eDNA read proportion",
        fill = "grams per individual") +
+  scale_x_continuous(limits = c(0, 1)) +
+  scale_y_continuous(limits = c(0, 1)) + 
   #theme(axis.text = element_text(size = 12),
   #      axis.title = element_text(size = 14),
   #      legend.text = element_text(size = 12),
@@ -323,7 +344,7 @@ all <- all %>%
 compute the perpendicular distance of each point to the line
 ```{r}
 dist_data <- all %>%
-  filter(n.tank.dissim != "2") %>%
+  filter(n.tank.dissim == "0") %>%
   filter(Fish_pres == "1") %>%
   mutate(AC_grams_per_N = AC_biomass/AC_N) %>%
   mutate(PC_grams_per_N = PC_biomass/PC_N) %>%
@@ -440,6 +461,60 @@ all_together
 ```
 
 ```{r}
-#ggsave("figures/Pcod_biomass_abund_w_residuals.png", plot = all_together, width = 8.5, height = 6, dpi = 300)
+ggsave("figures/Pcod_biomass_abund_w_residuals.png", plot = all_together, width = 8.5, height = 6, dpi = 300)
 ```
+
+
+## fold error 
+
+let's calculate fold error vs biomass proportions to see if there is more/less error at small biomass proportions 
+
+## plot true proportion by fold error (as in Shelton et al Appendix S1 Figure S2)
+
+```{r folderror}
+mypal <- c("#6a6599", "#79af97", "#00a1d5")   #purple, green, blue
+
+error <- all_long  %>%
+  filter(n.tank.dissim == "0") %>%
+  filter(Fish_pres == "1") %>%
+  mutate(fold_error = log(Fbiomass/Mean)) %>%
+  filter(Fbiomass > 0)
+
+error_plot <- error %>%
+  mutate(Species = ifelse(Species == "AC", "Arctic cod", Species)) %>%
+  mutate(Species = ifelse(Species == "PC", "Pacific cod", Species)) %>%
+  mutate(Species = ifelse(Species == "WP", "Walleye pollock", Species)) %>%
+  ggplot(aes(x=Fbiomass, y=fold_error, color=Species)) +
+  geom_point() + 
+  #geom_point(aes(shape = Community)) + 
+  geom_hline(yintercept = 0, linetype = 'dotted') +
+  scale_color_manual(values = mypal) + 
+  theme_bw() +
+  ylim(-2,2) +
+  labs(
+    y = "Fold Error (log[true_prop/obs_prop])",
+    x = "true proportion") 
+error_plot
+```
+```{r}
+#ggsave("figures/fold_error.png", plot = error_plot, width = 6, height = 4, dpi = 300)
+ggsave("figures/raw_fold_error.png", plot = error_plot, width = 6, height = 4, dpi = 300)
+```
+
+
+can i calculate the number of times a species read proportion's 95% CI overlaps with the true biomass proportion???
+```{r}
+biomass_ci <- all_long %>%
+  filter(Fbiomass > 0) %>%     #since estimates are never 0, i'm not sure how to account for those
+  filter(Fbiomass < 1) %>% #same thing for 1's 
+  mutate(in_ci = ifelse(Fbiomass > q.025 & Fbiomass < q.975, "yes", "no"))
+
+biomass_ci %>%
+  filter(in_ci == "yes")  #raw = 13; mock = 17
+  
+biomass_ci %>%
+  filter(in_ci == "no") #raw = 55; mock = 51
+```
+
+
 

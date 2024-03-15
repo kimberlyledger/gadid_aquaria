@@ -33,7 +33,7 @@ sp.by.comm <- mockcom_data %>% filter(Cycles==35) %>%
 
 load gadid aquaria data 
 ```{r}
-aquaria_data <- read.csv("/home/kimberly.ledger/gadid_aquaria/gadid_mb_aquaria/aquaria_taxonreads_20231101.csv") %>%
+aquaria_data <- read.csv("/home/kimberly.ledger/gadid_aquaria/gadid_mb_aquaria/aquaria_taxonreads_20240313.csv") %>%
   dplyr::select(!X) %>%
   dplyr::select(!sample_type)
 ```
@@ -62,9 +62,12 @@ missing_replicate1 <- aquaria_data%>%
   group_by(extraction_ID) %>%
   filter(!1 %in% pcr_replicate)
 
-# remove e02421-C
+# remove the C replicates - just need to makes sure every sample has an 1/A replicate 
 missing_replicate1 <- missing_replicate1 %>%
-  filter(Sample_ID != "e02421-C")
+  filter(Sample_ID != "e02421-C") %>%
+  filter(Sample_ID != "e02404-C") %>%
+  filter(Sample_ID != "e02405-C") %>% 	 
+  filter(Sample_ID != "e02473-C")
 
 # Update the pcr_replicate values for missing replicate 1
 missing_replicate1 <- missing_replicate1 %>%
@@ -72,7 +75,7 @@ missing_replicate1 <- missing_replicate1 %>%
 
 missing_replicate1$pcr_replicate <- as.integer(missing_replicate1$pcr_replicate)
 
-# now remove rows from aquaria 
+# now remove rows from aquaria
 aquaria_data_temp <- aquaria_data %>%
   filter(!Sample_ID %in% missing_replicate1$Sample_ID) %>%
   bind_rows(missing_replicate1)
@@ -192,7 +195,7 @@ sum(!env$Species %in% unique(mc$Species)) # this had better be zero.
               mutate(nReads = ifelse(is.na(nReads),0,nReads),
                   start_conc_ng = ifelse(is.na(start_conc_ng),0,start_conc_ng))     
 
-#env$nReads <- as.integer(env$nReads)
+env$nReads <- as.integer(env$nReads)
         
     sample_data <- env %>% 
       ungroup() %>% 
@@ -453,7 +456,7 @@ Output <- list(
 ```
 
 ```{r}
-#save(Output,file=paste0("/home/kimberly.ledger/gadid_aquaria/gadid_mb_aquaria/quant__mb_outputs/raw_20231101",".Rdata"))
+save(Output,file=paste0("/home/kimberly.ledger/gadid_aquaria/gadid_mb_aquaria/quant_mb_outputs/raw_20240313",".Rdata"))
 ```
 
 now redo some of the set up and run the stan code that incorporates amplification efficiency 
@@ -644,7 +647,7 @@ stanMod_summary[["mu_samp"]] <- summary(stanMod,pars="mu_samp")$summary
 stanMod_summary[["mu_mock"]] <- summary(stanMod,pars="mu_mock")$summary
 stanMod_summary[["int_samp_small"]] <- summary(stanMod,pars="int_samp_small")$summary
 
-Output <- list(
+Output_mock <- list(
   mockcom_data = mockcom_data, # raw data from all observations, all communities.
   env = env,  #environmental data
   mc = mc, #mock data
@@ -669,6 +672,6 @@ Output <- list(
 ```
 
 ```{r}
-#save(Output,file=paste0("/home/kimberly.ledger/gadid_aquaria/gadid_mb_aquaria/quant__mb_outputs/mock_20231102",".Rdata"))
+save(Output_mock,file=paste0("/home/kimberly.ledger/gadid_aquaria/gadid_mb_aquaria/quant_mb_outputs/mock_20240313",".Rdata"))
 ```
 

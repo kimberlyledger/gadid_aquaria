@@ -21,8 +21,9 @@ read in tables with reads assigned to species, post decontamination
 ```{r}
 runA <- read.csv("~/gadid_aquaria/gadid_mb_aquaria/20230918_taxon_reads.csv") %>%
   dplyr::select(!X) %>%
-  dplyr::rename(site = tank_ID)  #set tank_ID as the site
-
+  dplyr::rename(site = tank_ID) %>%  #set tank_ID as the site
+  mutate(site = as.integer(site))
+  
 runB <- read.csv("~/gadid_aquaria/gadid_mb_aquaria/20230921_taxon_reads.csv") %>%
   dplyr::select(!X) %>%
   filter(is.na(station_ID)) %>%                 ### keep just the aquaria reads (remove DBO)
@@ -41,10 +42,10 @@ mydata <- bind_rows(runA, runB)
 
 get some summary stats
 ```{r}
-#mydata %>%
-#  filter(sample_type != "sample") %>%
-#  dplyr::select(Sample_ID) %>%
-#  unique()
+mydata %>%
+  filter(sample_type != "sample") %>%
+  dplyr::select(Sample_ID, sample_type) %>%
+  unique()
 ```
 
 
@@ -291,7 +292,7 @@ ggplot (all.distances.to.plot) +
         Distance.type = "Distance") +
     guides (fill = "none")
 
-  #ggsave("visual.anova.png", dpi = "retina")
+ggsave("figures/pairwise_dissimilarity.png", width = 6, height = 4, dpi = 300)
 ```
 
 cool, pcr replicates look very similar. as do the biological replicates from the same site.  
@@ -357,13 +358,13 @@ calculate normal distribution of distances to centroid
 ```{r}
 normparams <- MASS::fitdistr(all_distances$distances, "normal")$estimate                                      
 probs <- pnorm(all_distances$distances, normparams[1], normparams[2])
-outliers_centroid <- which(probs>0.99)
+outliers_centroid <- which(probs>0.95)
 
 discard_centroid <- all_distances$distances_id[outliers_centroid]
 discard_centroid
 
 discard_centroid <- as.data.frame(discard_centroid)
-#write.csv(discard_centroid, "pcr_dissimilarity_outliers.csv")
+write.csv(discard_centroid, "pcr_dissimilarity_outliers.csv")
 ```
 
 instead of filtering by a probability, maybe just use a threshold? 
@@ -444,27 +445,113 @@ temp_table %>%
   )  
 ```
 
-site DBO2.5
-```{r}
-temp_table %>%
-  filter(site == "DBO2.5") %>%
-  group_by(Sample_ID) %>%
-  mutate(sum=sum(total_reads)) %>%
-  mutate(prop = total_reads/sum) %>%
-  ggplot(aes(x=Sample_ID, y=prop, fill=taxon)) +
-  geom_bar(stat = "identity") + 
-  facet_wrap(~alt_ID, scales = 'free', ncol = 3) +
-  theme_bw() + 
-  theme(
-    axis.text.x = element_text(angle = 90, hjust = 0.95),
-    legend.position = "right",
-    legend.title = element_blank()
-  )  
-```
 
 FOR NOW, I will NOT remove any pcr replicates because of dissimilarity.  i will just try to incorporate that variation into confidence estimates later on.  
 
 ```{r}
-#write.csv(mydata, "aquaria_taxonreads_20231101.csv")
+#write.csv(mydata, "aquaria_taxonreads_20240313.csv")
+```
+
+
+### adding this comparison to illustrate common practices
+
+look at the relationship between total metabarcoding reads and species biomass - just for illustration 
+```{r}
+aquaria_data <- read.csv("/home/kimberly.ledger/gadid_aquaria/gadid_mb_aquaria/aquaria_taxonreads_20240313.csv") %>%
+  dplyr::select(!X)
+```
+
+
+calculate average number of reads for each species from a specific tank experiment.  
+
+```{r}
+tanks <- aquaria_data %>%
+  group_by(site, taxon) %>%
+  summarise(avg_reads = mean(total_reads),
+            se_reads = sd(total_reads)/ sqrt(length(total_reads)),
+            lower = avg_reads - 1.96 * se_reads,
+            upper = avg_reads + 1.96 * se_reads) %>%
+  dplyr::rename(Species = taxon) %>%
+  dplyr::rename(tank_ID = site) %>%
+  mutate(Species = ifelse(Species == "Boreogadus saida", "Arctic cod", Species)) %>%
+  mutate(Species = ifelse(Species == "Gadus macrocephalus", "Pacific cod", Species)) %>%
+  mutate(Species = ifelse(Species == "Gadus chalcogrammus", "Walleye pollock", Species))
+```
+
+okay, now let's plot this against what we know is the true biomass proportions
+
+read in tank metadata 
+```{r}
+metadata <-  read.csv("/home/kimberly.ledger/gadid_aquaria/gadid_mb_aquaria/TankData_MBmodified.csv") %>% 
+  filter(groupID != "T") %>%  #remove tap water controls
+  dplyr::select(!sampleID) %>% #remove sample id because estimates are at the tank-level
+  unique() %>%
+  dplyr::rename(tank_ID = groupID) %>%
+  mutate(tank_ID = as.integer(tank_ID))
+```
+
+join - this removes the few T tanks with eDNA reads
+```{r}
+all_long <- metadata %>%
+  pivot_longer(cols = c(19:21), names_to = "Species", values_to = "Fbiomass") %>%
+  mutate(Species = str_remove(Species, "_Fbiomass")) %>%
+  mutate(Species = ifelse(Species == "AC", "Arctic cod", Species)) %>%
+  mutate(Species = ifelse(Species == "PC", "Pacific cod", Species)) %>%
+  mutate(Species = ifelse(Species == "WP", "Walleye pollock", Species)) %>%
+  left_join(tanks, by = c("tank_ID", "Species"))
+```
+
+
+```{r}
+mypal <- c("#6a6599", "#79af97", "#00a1d5")   #purple, green, blue
+
+read_count_fig <- all_long %>%
+  ggplot() + 
+  geom_errorbar(aes(x=Fbiomass,ymin=lower,ymax=upper,color=Species),width=0, size = .5) +
+  geom_point(aes(x=Fbiomass,y=avg_reads,color=Species), size = 2) +
+  scale_color_manual(values = mypal) + 
+  theme_classic() + 
+  labs(x = "proportional biomass",
+       y = "average eDNA read count") +
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 14),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 14))
+
+read_count_fig
+```
+
+```{r}
+ggsave("figures/read_count.png", plot = read_count_fig, width = 8.5, height = 6, dpi = 300)
+```
+
+
+what about true species biomass
+```{r}
+read_count_biomass_fig <- all_long %>%
+  pivot_longer(cols = c(15:17), names_to = "Species2", values_to = "biomass") %>%
+  mutate(Species2 = ifelse(Species2 == "AC_biomass", "Arctic cod", Species2)) %>%
+  mutate(Species2 = ifelse(Species2 == "PC_biomass", "Pacific cod", Species2)) %>%
+  mutate(Species2 = ifelse(Species2 == "WP_biomass", "Walleye pollock", Species2)) %>%
+  filter(Species == Species2) %>%
+  ggplot() + 
+  geom_errorbar(aes(x=biomass,ymin=lower,ymax=upper,color=Species),width=0, size = .5) +
+  geom_point(aes(x=biomass,y=avg_reads,color=Species), size = 2) +
+  scale_color_manual(values = mypal) + 
+  theme_classic() + 
+  scale_x_continuous(trans = "sqrt") +
+  scale_y_continuous(trans = "sqrt") +
+  labs(x = "biomass (grams)",
+       y = "average eDNA read count") +
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 14),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 14))
+read_count_biomass_fig 
+```
+
+
+```{r}
+ggsave("figures/read_count_biomass.png", plot = read_count_biomass_fig, width = 8.5, height = 6, dpi = 300)
 ```
 
