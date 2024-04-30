@@ -306,46 +306,120 @@ combined %>%
 
 ```
 
-
 okay, since the species estimates are not independent, plot just one species at a time??? 
+also run linear models 
 
+
+
+
+arctic cod - log10 transformed x and y 
 ```{r}
-combined %>%
+ac <- combined %>%
   filter(Species == "Arctic cod") %>%
-  filter(biomass < 5000) %>%
-  filter(biomass > 0) %>%
+  filter(biomass > 0)
+
+10^(mean(ac$Conc_mean))
+10^(median(ac$Conc_mean))
+10^(quantile(ac$Conc_mean, probs = 0.025))
+10^(quantile(ac$Conc_mean, probs = 0.975))
+
+#ac_lm1 <- lm(Conc_mean ~ log10(biomass)-1, data = ac)
+#summary(ac_lm1)
+
+ac_lm2 <- lm(Conc_mean ~ log10(biomass), data = ac)
+summary(ac_lm2)
+
+# 
+# ac %>%  
+#   ggplot() + 
+#   geom_point(aes(x=log10(biomass), y=Conc_mean, color = Species), cex = 2) + 
+#   geom_errorbar(aes(x=log10(biomass), y=Conc_mean, ymin = Conc_q.025, ymax = Conc_q.975, color = Species), width = 0) +
+#   geom_abline(slope = coef(ac_lm1)[1], intercept = 0, color = "black", linetype = "dashed") +
+#   theme_classic() + 
+#   scale_color_manual(values = "#6a6599") + 
+#   labs(x = "log10(biomass)",
+#        y = "log10(DNA copy number)") +
+#   xlim(0,4)
+#   
+  
+ac_plot <- ac %>%  
   ggplot() + 
   geom_point(aes(x=log10(biomass), y=Conc_mean, color = Species), cex = 2) + 
   geom_errorbar(aes(x=log10(biomass), y=Conc_mean, ymin = Conc_q.025, ymax = Conc_q.975, color = Species), width = 0) +
+  geom_abline(slope = coef(ac_lm2)[2], intercept = coef(ac_lm2)[1], color = "black", linetype = "dashed") +
   theme_classic() + 
   scale_color_manual(values = "#6a6599") + 
   labs(x = "log10(biomass)",
-       y = "log10(DNA copy number)") 
+       y = "log10(DNA copy number)",
+       color = "") +
+  theme(legend.position = "top")
+ac_plot
+```
 
-combined %>%
+
+pacific cod - log10 transformed x and y 
+```{r}
+pc <- combined %>%
   filter(Species == "Pacific cod") %>%
-  filter(biomass < 5000) %>%
-  filter(biomass > 0) %>%
+  filter(biomass > 0) #%>%
+  #filter(biomass < 5000)
+
+10^(mean(pc$Conc_mean))
+10^(median(pc$Conc_mean))
+10^(quantile(pc$Conc_mean, probs = 0.025))
+10^(quantile(pc$Conc_mean, probs = 0.975))
+
+
+#pc_lm1 <- lm(Conc_mean ~ log10(biomass)-1, data = pc)
+#summary(pc_lm1)
+
+pc_lm2 <- lm(Conc_mean ~ log10(biomass), data = pc)
+summary(pc_lm2)
+
+
+# pc %>%  
+#   ggplot() + 
+#   geom_point(aes(x=log10(biomass), y=Conc_mean, color = Species), cex = 2) + 
+#   geom_errorbar(aes(x=log10(biomass), y=Conc_mean, ymin = Conc_q.025, ymax = Conc_q.975, color = Species), width = 0) +
+#   geom_abline(slope = coef(pc_lm1)[1], intercept = 0, color = "black", linetype = "dashed") +
+#   theme_classic() + 
+#   scale_color_manual(values = "#79af97") + 
+#   labs(x = "log10(biomass)",
+#        y = "log10(DNA copy number)") +
+#   xlim(0,4)
+#   
+  
+pc_plot <- pc %>%  
   ggplot() + 
   geom_point(aes(x=log10(biomass), y=Conc_mean, color = Species), cex = 2) + 
   geom_errorbar(aes(x=log10(biomass), y=Conc_mean, ymin = Conc_q.025, ymax = Conc_q.975, color = Species), width = 0) +
+  geom_abline(slope = coef(pc_lm2)[2], intercept = coef(pc_lm2)[1], color = "black", linetype = "dashed") +
   theme_classic() + 
   scale_color_manual(values = "#79af97") + 
   labs(x = "log10(biomass)",
-       y = "log10(DNA copy number)") 
+       y = "log10(DNA copy number)",
+       color = "") +
+  theme(legend.position = "top")
 
-combined %>%
-  filter(Species == "Walleye pollock") %>%
-  filter(biomass < 5000) %>%
-  filter(biomass > 0) %>%
-  ggplot() + 
-  geom_point(aes(x=log10(biomass), y=Conc_mean, color = Species), cex = 2) + 
-  geom_errorbar(aes(x=log10(biomass), y=Conc_mean, ymin = Conc_q.025, ymax = Conc_q.975, color = Species), width = 0) +
-  theme_classic() + 
-  scale_color_manual(values = "#00a1d5") + 
-  labs(x = "log10(biomass)",
-       y = "log10(DNA copy number)") 
+pc_plot
+```
 
+combine plots
+```{r, fig.width=10, fig.height=4}
+library(patchwork)
+
+combined_fig <- ac_plot + pc_plot + plot_layout(guides = 'keep') + plot_annotation(tag_levels = 'A') &
+    theme(plot.tag = element_text(face = 'bold'))
+combined_fig
+```
+
+```{r}
+ggsave("my_figures/ac_pc_estimates.png", plot = combined_fig, width = 8, height = 4, dpi = 300)
+```
+
+
+
+```{r}
 fig_onecolor_zoom <- combined %>%
   filter(biomass < 5000) %>%
   filter(biomass > 0) %>%
@@ -372,10 +446,9 @@ fig_onecolor
 ```
 
 ```{r}
-ggsave("my_figures/bm_cn.png", plot = fig_onecolor, width = 6, height = 4, dpi = 300)
-ggsave("my_figures/bm_cn_zoom.png", plot = fig_onecolor_zoom, width = 6, height = 4, dpi = 300)
+#ggsave("my_figures/bm_cn.png", plot = fig_onecolor, width = 6, height = 4, dpi = 300)
+#ggsave("my_figures/bm_cn_zoom.png", plot = fig_onecolor_zoom, width = 6, height = 4, dpi = 300)
 ```
-
 
 
 ```{r}
@@ -464,7 +537,7 @@ fig_gradient
 fig_binary <- combined %>%
   filter(biomass > 0) %>%
   #filter(biomass < 5500) %>%
-  mutate(low_WP = ifelse(WP_Fbiomass < 0.3, "<0.3", ">=0.3")) %>%
+  mutate(low_WP = ifelse(WP_Fbiomass < 0.25, "<0.25", ">=0.25")) %>%
   ggplot() +
   geom_point(aes(x=log10(biomass), y=Conc_mean, color = low_WP, shape = Species), cex = 2) + 
   geom_errorbar(aes(x=log10(biomass), y=Conc_mean, ymin = Conc_q.025, ymax = Conc_q.975, color = low_WP), width = 0) +
@@ -479,17 +552,70 @@ fig_binary
 
 
 ```{r}
-ggsave("my_figures/bm_cn_wp_gradient.png", plot = fig_gradient, width = 8, height = 4, dpi = 300)
+#ggsave("my_figures/bm_cn_wp_gradient.png", plot = fig_gradient, width = 8, height = 4, dpi = 300)
 ggsave("my_figures/bm_cn_wp_binary.png", plot = fig_binary, width = 8, height = 4, dpi = 300)
 ```
 
+remake ac and pc figures/linear model and remove tanks with <25% WP biomass 
 
-```{r, fig.width=10, fig.height=4}
-library(patchwork)
 
-combined_fig <- fig_gradient + fig_binary + 
-  #plot_layout(guides = 'collect') + 
-  plot_annotation(tag_levels = 'A') &
-    theme(plot.tag = element_text(face = 'bold'))
-combined_fig
+```{r}
+ac <- combined %>%
+  filter(Species == "Arctic cod") %>%
+  filter(biomass > 0) %>%
+  filter(WP_Fbiomass >= 0.25)   #should remove 2 tanks
+
+10^(mean(ac$Conc_mean))
+10^(median(ac$Conc_mean))
+10^(quantile(ac$Conc_mean, probs = 0.025))
+10^(quantile(ac$Conc_mean, probs = 0.975))
+
+ac_lm3 <- lm(Conc_mean ~ log10(biomass), data = ac)
+summary(ac_lm3)
+
+ac_plot_reduced <- ac %>%  
+  ggplot() + 
+  geom_point(aes(x=log10(biomass), y=Conc_mean, color = Species), cex = 2) + 
+  geom_errorbar(aes(x=log10(biomass), y=Conc_mean, ymin = Conc_q.025, ymax = Conc_q.975, color = Species), width = 0) +
+  geom_abline(slope = coef(ac_lm3)[2], intercept = coef(ac_lm3)[1], color = "black", linetype = "dashed") +
+  theme_classic() + 
+  scale_color_manual(values = "#6a6599") + 
+  labs(x = "log10(biomass)",
+       y = "log10(DNA copy number)",
+       color = "") +
+  theme(legend.position = "top")
+ac_plot_reduced
 ```
+
+```{r}
+pc <- combined %>%
+  filter(Species == "Pacific cod") %>%
+  filter(biomass > 0) %>%
+  filter(WP_Fbiomass >= 0.25)
+
+10^(mean(pc$Conc_mean))
+10^(median(pc$Conc_mean))
+10^(quantile(pc$Conc_mean, probs = 0.025))
+10^(quantile(pc$Conc_mean, probs = 0.975))
+
+pc_lm3 <- lm(Conc_mean ~ log10(biomass), data = pc)
+summary(pc_lm3)
+
+pc_plot_reduced <- pc %>%  
+  ggplot() + 
+  geom_point(aes(x=log10(biomass), y=Conc_mean, color = Species), cex = 2) + 
+  geom_errorbar(aes(x=log10(biomass), y=Conc_mean, ymin = Conc_q.025, ymax = Conc_q.975, color = Species), width = 0) +
+  geom_abline(slope = coef(pc_lm3)[2], intercept = coef(pc_lm3)[1], color = "blpck", linetype = "dashed") +
+  theme_classic() + 
+  scale_color_manual(values = "#6a6599") + 
+  labs(x = "log10(biomass)",
+       y = "log10(DNA copy number)",
+       color = "") +
+  theme(legend.position = "top")
+pc_plot_reduced
+```
+
+
+
+
+

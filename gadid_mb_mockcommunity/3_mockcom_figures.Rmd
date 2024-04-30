@@ -189,12 +189,23 @@ p3 <- grid.arrange(M1_plot + ggtitle(NULL,subtitle="Middle1"),
 
 
 ```{r}
+# Make plots
+BREAKS <- c(0.0,0.05,0.10,0.25,0.50)
+x.labs <- c("Uncorrected","Corrected")                          ## not sure what this is designating later on 
+x.at   <- c(1,2)
+
 ## let me try to squish this into one plot 
 all.dat <- M1.dat %>%
   bind_rows(N1.dat) %>%
   bind_rows(N2.dat) %>%
   bind_rows(S1.dat) %>%
-  bind_rows(S2.dat)
+  bind_rows(S2.dat) %>%
+  mutate(Species = ifelse(Species == "zRefSpecies_Arctogadus glacialis", "Polar cod", Species)) %>%
+  mutate(Species = ifelse(Species == "Boreogadus saida", "Arctic cod", Species)) %>%
+  mutate(Species = ifelse(Species == "Eleginus gracilis", "Saffron cod", Species)) %>%
+  mutate(Species = ifelse(Species == "Gadus chalcogrammus", "Walleye pollock", Species)) %>%
+  mutate(Species = ifelse(Species == "Gadus macrocephalus", "Pacific cod", Species)) %>%
+  mutate(Species = ifelse(Species == "Microgadus proximus", "Pacific tomcod", Species))
 
 skew_plot <- function(dat,
                       BREAKS=BREAKS,x.labs=x.labs,x.at=x.at){
@@ -203,19 +214,19 @@ skew_plot <- function(dat,
   #col.val = pal_jco(palette = c("default"), alpha = 1)(10)[c(1,4)]
   
   skew.plot <-  ggplot(dat) +
-    scale_color_gradientn(colours = rainbow(4)) +
+    scale_color_gradientn(colours = rainbow(8)[c(1,2,3,6)]) +
     geom_errorbar(aes(x=1+offset,
                       ymin=raw.2.5,   
                       ymax=raw.97.5,color=true.prop),width=0,alpha=0.75)   +
-    geom_point(aes(x=1+offset,y=raw.mean, #shape=true.prop,
+    geom_point(aes(x=1+offset,y=raw.mean, shape=Species,
                    fill=true.prop,color=true.prop),size=2) +
     # mock with mock communities at multiple PCR
      geom_errorbar(aes(x=2+offset,
                        ymin= mock1.2.5, 
                        ymax= mock1.97.5, color = true.prop),width=0,alpha=0.5)   +
-     geom_point(aes(x=2+offset,mock1.mean, #shape=true.prop,
+     geom_point(aes(x=2+offset,mock1.mean, shape=Species,
                     fill=true.prop,color=true.prop), size=2) +
-    #scale_shape_manual(values =c(21,22)) +
+    scale_shape_manual(values =c(16,15,17,1,8,18)) +
     #scale_fill_manual(values= col.val, "True value") +
     #scale_color_manual(values= col.val,"True value") +
     scale_y_continuous("Proportion",
@@ -226,7 +237,10 @@ skew_plot <- function(dat,
     #geom_point(aes(x=0.70,y=true.prop,shape=true.prop,fill=true.prop),size=3) +
     scale_x_continuous(name=NULL,breaks=x.at,labels = x.labs) +
     theme_classic() +
-    theme(legend.position = "none")
+    theme(legend.position = "right",
+          legend.text = element_text(size = 8),
+          legend.title = element_text(size = 9)) +
+    guides(color = "none", fill = "none", shape = guide_legend(override.aes = list(size = 2)))
   
   return(skew.plot)
 }
@@ -235,18 +249,132 @@ all_plot <- skew_plot(dat=all.dat,
                           BREAKS=BREAKS,x.labs=x.labs,x.at=x.at) 
 all_plot
 
-ggsave(plot= all_plot, 
-      filename = ("~/gadid_aquaria/gadid_mb_mockcommunity/mock_adjustments.png"),
-      width=5,
-      height = 3,
-      dpi = 300,
-      units = c("in"))
+#ggsave(plot= all_plot, 
+#      filename = ("~/gadid_aquaria/gadid_mb_mockcommunity/mock_adjustments.png"),
+#      width=5,
+#      height = 3,
+#      dpi = 300,
+#      units = c("in"))
 ```
 
+
+let's visualize as scatterplots to match how we look at the tank experiment output
 
 ```{r}
-my_colors <- c("#898E8C", "#6a6599", "#b24746", "#00a1d5", "#79af97", "#df8f44")
+my_colors <- c("#6a6599", "#79af97", "#df8f44", "#898E8C", "#b24746", "#00a1d5") 
+#purple, green, orange, grey, red, blue
+
+all.dat$Species <- as.factor(all.dat$Species)
+levels(all.dat$Species)
 ```
+
+
+#raw data 
+```{r}
+raw_plot <- all.dat %>%
+  ggplot() + 
+  geom_errorbar(aes(x=true.prop,ymin=raw.2.5,ymax=raw.97.5,color=Species),width=0, size = .5) +
+  geom_point(aes(x=true.prop,y=raw.mean,color=Species), size = 2) +
+  geom_smooth(aes(x=true.prop,y=raw.mean,color=Species), method = "lm", formula = y ~ x - 1, se = FALSE) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "black")  + 
+  scale_color_manual(values = my_colors) + 
+  theme_classic() + 
+    labs(x = "true proportion",
+       y = "uncorrected eDNA read proportion") +
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 12),
+        legend.text = element_text(size = 10),
+        legend.title = element_text(size = 12))
+
+raw_plot
+```
+
+#mock-adjusted data 
+```{r}
+mock_plot <- all.dat %>%
+  ggplot() + 
+  geom_errorbar(aes(x=true.prop,ymin=mock1.2.5,ymax=mock1.97.5,color=Species),width=0, size = .5) +
+  geom_point(aes(x=true.prop,y=mock1.mean,color=Species), size = 2) +
+  geom_smooth(aes(x=true.prop,y=mock1.mean,color=Species), method = "lm", formula = y ~ x - 1, se = FALSE) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "black")  + 
+  scale_color_manual(values = my_colors) + 
+  theme_classic() + 
+    labs(x = "true proportion",
+       y = "corrected eDNA read proportion") +
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 12),
+        legend.text = element_text(size = 10),
+        legend.title = element_text(size = 12))
+mock_plot
+```
+
+put together into one plot 
+```{r, fig.width=10, fig.height=4}
+library(patchwork)
+
+combined_fig <- raw_plot + mock_plot + plot_layout(guides = 'collect') + plot_annotation(tag_levels = 'A') &
+    theme(plot.tag = element_text(face = 'bold'))
+combined_fig
+
+#ggsave("raw_v_mock.png", plot = combined_fig, width = 10, height = 4, dpi = 300)
+```
+
+
+now let's calculate slopes/r2 for those models (to report in supplementary?)
+```{r}
+arctic <- all.dat %>%
+  filter(Species == "Arctic cod")
+saffron <- all.dat %>%
+  filter(Species == "Saffron cod")
+pollock <- all.dat %>%
+  filter(Species == "Walleye pollock")
+pacific <- all.dat %>%
+  filter(Species == "Pacific cod")
+tomcod <- all.dat %>%
+  filter(Species == "Pacific tomcod")
+polar <- all.dat %>%
+  filter(Species == "Polar cod")
+
+arctic_raw <- lm(raw.mean ~ true.prop - 1, data = arctic)
+summary(arctic_raw)
+arctic_mock <- lm(mock1.mean ~ true.prop - 1, data = arctic)
+summary(arctic_mock)
+
+saffron_raw <- lm(raw.mean ~ true.prop - 1, data = saffron)
+summary(saffron_raw)
+saffron_mock <- lm(mock1.mean ~ true.prop - 1, data = saffron)
+summary(saffron_mock)
+
+pollock_raw <- lm(raw.mean ~ true.prop - 1, data = pollock)
+summary(pollock_raw)
+pollock_mock <- lm(mock1.mean ~ true.prop - 1, data = pollock)
+summary(pollock_mock)
+
+pacific_raw <- lm(raw.mean ~ true.prop - 1, data = pacific)
+summary(pacific_raw)
+pacific_mock <- lm(mock1.mean ~ true.prop - 1, data = pacific)
+summary(pacific_mock)
+
+tomcod_raw <- lm(raw.mean ~ true.prop - 1, data = tomcod)
+summary(tomcod_raw)
+tomcod_mock <- lm(mock1.mean ~ true.prop - 1, data = tomcod)
+summary(tomcod_mock)
+
+polar_raw <- lm(raw.mean ~ true.prop - 1, data = polar)
+summary(polar_raw)
+polar_mock <- lm(mock1.mean ~ true.prop - 1, data = polar)
+summary(polar_mock)
+```
+
+
+
+additional plots
+
+```{r}
+my_colors <- c("#898E8C", "#6a6599", "#b24746", "#00a1d5", "#79af97", "#df8f44") 
+#grey, purple, red, blue, green, orange
+```
+
 
 plot each of the unknown mock communities - true, mean raw, and mean mock-adjusted 
 ```{r}
