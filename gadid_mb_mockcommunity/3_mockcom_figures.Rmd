@@ -191,7 +191,7 @@ p3 <- grid.arrange(M1_plot + ggtitle(NULL,subtitle="Middle1"),
 ```{r}
 # Make plots
 BREAKS <- c(0.0,0.05,0.10,0.25,0.50)
-x.labs <- c("Uncorrected","Corrected")                          ## not sure what this is designating later on 
+x.labs <- c("Uncorrected","Corrected")                          
 x.at   <- c(1,2)
 
 ## let me try to squish this into one plot 
@@ -258,8 +258,7 @@ all_plot
 ```
 
 
-let's visualize as scatterplots to match how we look at the tank experiment output
-
+let's visualize as scatter plots to match how we look at the tank experiment output
 ```{r}
 my_colors <- c("#6a6599", "#79af97", "#df8f44", "#898E8C", "#b24746", "#00a1d5") 
 #purple, green, orange, grey, red, blue
@@ -275,7 +274,7 @@ raw_plot <- all.dat %>%
   ggplot() + 
   geom_errorbar(aes(x=true.prop,ymin=raw.2.5,ymax=raw.97.5,color=Species),width=0, size = .5) +
   geom_point(aes(x=true.prop,y=raw.mean,color=Species), size = 2) +
-  geom_smooth(aes(x=true.prop,y=raw.mean,color=Species), method = "lm", formula = y ~ x - 1, se = FALSE) +
+  geom_smooth(aes(x=true.prop,y=raw.mean,color=Species), method = "lm", formula = y ~ x, se = FALSE) +
   geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "black")  + 
   scale_color_manual(values = my_colors) + 
   theme_classic() + 
@@ -295,7 +294,7 @@ mock_plot <- all.dat %>%
   ggplot() + 
   geom_errorbar(aes(x=true.prop,ymin=mock1.2.5,ymax=mock1.97.5,color=Species),width=0, size = .5) +
   geom_point(aes(x=true.prop,y=mock1.mean,color=Species), size = 2) +
-  geom_smooth(aes(x=true.prop,y=mock1.mean,color=Species), method = "lm", formula = y ~ x - 1, se = FALSE) +
+  geom_smooth(aes(x=true.prop,y=mock1.mean,color=Species), method = "lm", formula = y ~ x, se = FALSE) +
   geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "black")  + 
   scale_color_manual(values = my_colors) + 
   theme_classic() + 
@@ -320,7 +319,7 @@ combined_fig
 ```
 
 
-now let's calculate slopes/r2 for those models (to report in supplementary?)
+now let's calculate slopes/r2 for those models
 ```{r}
 arctic <- all.dat %>%
   filter(Species == "Arctic cod")
@@ -335,37 +334,36 @@ tomcod <- all.dat %>%
 polar <- all.dat %>%
   filter(Species == "Polar cod")
 
-arctic_raw <- lm(raw.mean ~ true.prop - 1, data = arctic)
+arctic_raw <- lm(raw.mean ~ true.prop, data = arctic)
 summary(arctic_raw)
-arctic_mock <- lm(mock1.mean ~ true.prop - 1, data = arctic)
+arctic_mock <- lm(mock1.mean ~ true.prop, data = arctic)
 summary(arctic_mock)
 
-saffron_raw <- lm(raw.mean ~ true.prop - 1, data = saffron)
+saffron_raw <- lm(raw.mean ~ true.prop, data = saffron)
 summary(saffron_raw)
-saffron_mock <- lm(mock1.mean ~ true.prop - 1, data = saffron)
+saffron_mock <- lm(mock1.mean ~ true.prop, data = saffron)
 summary(saffron_mock)
 
-pollock_raw <- lm(raw.mean ~ true.prop - 1, data = pollock)
+pollock_raw <- lm(raw.mean ~ true.prop, data = pollock)
 summary(pollock_raw)
-pollock_mock <- lm(mock1.mean ~ true.prop - 1, data = pollock)
+pollock_mock <- lm(mock1.mean ~ true.prop, data = pollock)
 summary(pollock_mock)
 
-pacific_raw <- lm(raw.mean ~ true.prop - 1, data = pacific)
+pacific_raw <- lm(raw.mean ~ true.prop, data = pacific)
 summary(pacific_raw)
-pacific_mock <- lm(mock1.mean ~ true.prop - 1, data = pacific)
+pacific_mock <- lm(mock1.mean ~ true.prop, data = pacific)
 summary(pacific_mock)
 
-tomcod_raw <- lm(raw.mean ~ true.prop - 1, data = tomcod)
+tomcod_raw <- lm(raw.mean ~ true.prop, data = tomcod)
 summary(tomcod_raw)
-tomcod_mock <- lm(mock1.mean ~ true.prop - 1, data = tomcod)
+tomcod_mock <- lm(mock1.mean ~ true.prop, data = tomcod)
 summary(tomcod_mock)
 
-polar_raw <- lm(raw.mean ~ true.prop - 1, data = polar)
+polar_raw <- lm(raw.mean ~ true.prop, data = polar)
 summary(polar_raw)
-polar_mock <- lm(mock1.mean ~ true.prop - 1, data = polar)
+polar_mock <- lm(mock1.mean ~ true.prop, data = polar)
 summary(polar_mock)
 ```
-
 
 
 additional plots
@@ -481,157 +479,14 @@ p_clr_mock2 <-  ggplot(clr_alpha_sum) +
           axis.text.y = element_text(size=10))
 
 p_clr_mock2
+
+#ggsave(p_clr_mock2, filename = "/home/kimberly.ledger/gadid_metabarcoding/aquaria_DBO/quant_outputs/gadid_even_CLR.pdf", width = 5, height = 5, units = "in")
 ```
 
 ```{r}
-#ggsave(p_clr_mock2, filename = "/home/kimberly.ledger/gadid_metabarcoding/aquaria_DBO/quant_outputs/gadid_even_CLR.pdf", width = 5, height = 5, units = "in")
-  
 clr_alpha_sum <- clr_alpha_sum %>%
   mutate(mock = "even")
 
-write.csv(clr_alpha_sum, "/home/kimberly.ledger/gadid_metabarcoding/aquaria_DBO/quant_outputs/gadid_even_CLR.csv", row.names = F)
+#write.csv(clr_alpha_sum, "/home/kimberly.ledger/gadid_metabarcoding/aquaria_DBO/quant_outputs/gadid_even_CLR.csv", row.names = F)
 ```
 
-
-```{r}
-####################################################33
-# Calculate Aitchison Distance
-####################################################33
-
-
-# Aitchison distance
-# Calculate for raw, mock, and pcr in 
-
-# Make containers for each type of output
-make.cont <- function(dat){
-  out <-  matrix(0,max(dat$comm_idx),max(dat$sp_idx))
-  rownames(out) <- dat %>% distinct(community) %>% pull(community)
-  colnames(out) <- dat %>% distinct(Species) %>% pull(Species)
-  return(out)
-}
-
-raw.out <- make.cont(raw.post)
-mock1.out <- make.cont(mock1.post)
-
-raw.sp   <- data.frame(Species=raw.post %>% distinct(Species) %>% pull(Species))
-raw.comm <- data.frame(community=raw.post %>% distinct(community) %>% pull(community))
-
-mock.sp   <- data.frame(Species=mock1.post %>% distinct(Species) %>% pull(Species))
-mock.comm <- data.frame(community=mock1.post %>% distinct(community) %>% pull(community))
-
-# make true.matrix
-
-true.mat <- result.dat %>% 
-  select(c(Species, community, true.prop)) %>%
-  pivot_wider(values_from = "true.prop", names_from = "Species") %>%
-  as.data.frame() %>%
-  select(!Cycles)
-
-rownames(true.mat) <- true.mat$community
-true.mat <-  true.mat %>% ungroup() %>% dplyr::select(-community)
-
-#####################################################################   
-
-# so i can't get robCompositions to install now so switching to another package... 
-library(coda.base)
-
-# loop over raw
-raw.AD <- data.frame(matrix(0,dim(raw$pars$int_samp_small)[1],nrow(true.mat)))
-colnames(raw.AD) <- rownames(true.mat)
-for(i in 1:dim(raw$pars$int_samp_small)[1]){
-  raw.1 <- raw$pars$int_samp_small[i,,] %>% as.data.frame()
-  rownames(raw.1) <- raw.comm$community 
-  colnames(raw.1) <- raw.sp$Species
-  raw.2 <- raw.1 %>% 
-              filter(rownames(.) %in% result.dat$community)%>%
-              dplyr::select(result.dat$Species) 
-  
-  for(j in 1:nrow(raw.2)){
-    these <- which(true.mat[j,]>0)
-    true <- true.mat[j,these]
-    raw.3 <- raw.2[j,these] / sum(raw.2[j,these])
-    
-    #raw.AD[i,rownames(true.mat)[j]] <-  aDist(true,raw.3)
-    raw.AD[i,rownames(true.mat)[j]] <-  dist(rbind(true,raw.3), method = "aitchison")
-  }
-  #print(i)
-}
-
-# loop over mock1
-mock1.AD <- data.frame(matrix(0,dim(mock1$pars$int_samp_small)[1],nrow(true.mat)))
-colnames(mock1.AD) <- rownames(true.mat)
-for(i in 1:dim(mock1$pars$int_samp_small)[1]){
-  mock.a <- mock1$pars$int_samp_small[i,,] %>% as.data.frame()
-  rownames(mock.a) <- mock.comm$community 
-  colnames(mock.a) <- mock.sp$Species
-  mock.b <- mock.a %>% 
-    filter(rownames(.) %in% result.dat$community)%>%
-    dplyr::select(result.dat$Species) 
-  
-  for(j in 1:nrow(mock.b)){
-    these <- which(true.mat[j,]>0)
-    true <- true.mat[j,these]
-    mock.c <- mock.b[j,these] / sum(mock.b[j,these])
-    
-    #mock1.AD[i,rownames(true.mat)[j]] <-  aDist(true,mock.c)
-    mock1.AD[i,rownames(true.mat)[j]] <-  dist(rbind(true,mock.c), method = "aitchison")
-  }
-  #print(i)
-}
-
-raw.AD$model <- "raw"
-mock1.AD$model <- "mock1"
-
-all.AD <- bind_rows(raw.AD,mock1.AD)
-
-all.AD <- all.AD %>% 
-              pivot_longer(.,-model,
-                           names_to="community",
-                           values_to = "val")
-all.AD.sum <- all.AD %>% group_by(model,community) %>% 
-                summarize(Mean = mean(val),
-                          SD=sd(val),
-                          q.025 = quantile(val,probs=0.025),
-                          q.05 = quantile(val,probs=0.05),
-                          q.25 = quantile(val,probs=0.25),
-                          q.75 = quantile(val,probs=0.75),
-                          q.95 = quantile(val,probs=0.95),
-                          q.975 = quantile(val,probs=0.975))  %>%
-                ungroup() %>%
-                mutate(offset.plot = 0,
-                       offset.plot = ifelse(model=="raw",-0.05,offset.plot)) %>%
-                mutate(Calibration = case_when(model=="raw"~"None",
-                             model=="mock1"~"Mock")) %>%
-                as.data.frame()
-
-all.AD.sum$comm.idx = as.numeric(as.factor(all.AD.sum$community))
-                
-
-
-xBREAKS <- all.AD.sum %>% distinct(comm.idx,community)
-yBREAKS <- c(0,1,2,3,4,5)
-
-col.val <- pal_jco(palette = c("default"), alpha = 1)(10)[c(6,7)]
-
-p_AD <- ggplot(all.AD.sum) + # %>% 
-          geom_errorbar(aes(x=comm.idx + offset.plot,ymin=q.025,ymax=q.975,color=Calibration),width=0) +
-          geom_errorbar(aes(x=comm.idx + offset.plot,ymin=q.25,ymax=q.75,color=Calibration),size=2,width=0) +        
-          geom_point(aes(x=comm.idx + offset.plot,y=Mean,color=Calibration),shape =21,fill="white",size=2) +
-          #scale_y_continuous(NULL,expand=c(0,NA),limits=c(0,NA),breaks=yBREAKS) +
-          #scale_shape_manual(values=c(21,22,24)) +
-          scale_fill_manual(values=col.val,"Community") +
-          scale_color_manual(values=col.val,"Calibration") +
-          scale_x_continuous(NULL,breaks=xBREAKS$comm.idx,labels=xBREAKS$community,limits=c(NA,5.3)) +
-          ylab("Aitchison distance") +
-          theme_classic() +
-          theme(legend.position = c(0.4755,0.85),
-                plot.margin = margin(0,0,0,0.85,"lines"),
-                legend.key.size=unit(0.1,'lines'),
-                legend.text=element_text(size=7),
-                legend.title=element_text(size=9))
-          
-p_AD
-
-
-#ggsave(p_AD, filename = "/home/kimberly.ledger/gadid_metabarcoding/mock_community/mockcom_comparison/gadid_even_aitchison.jpg", width = 6, height = 5, units = "in")
-```
