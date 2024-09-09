@@ -5,3 +5,5 @@
 quant_mb_outputs
 GraVel.csv
 7_mb_estimates_v_truth.Rmd
+allometry_N.csv
+allometry_mass.csv

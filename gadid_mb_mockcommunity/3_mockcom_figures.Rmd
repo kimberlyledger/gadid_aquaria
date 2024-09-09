@@ -318,7 +318,6 @@ combined_fig
 #ggsave("raw_v_mock.png", plot = combined_fig, width = 10, height = 4, dpi = 300)
 ```
 
-
 now let's calculate slopes/r2 for those models
 ```{r}
 arctic <- all.dat %>%
@@ -366,6 +365,101 @@ summary(polar_mock)
 ```
 
 
+according to the even mock community, let me plot the proportional abundance pre-PCR vs post-PCR 
+```{r}
+fig_df <- all.dat %>%
+  select(Species, community, true.prop, raw.mean, mock1.mean) %>%
+  pivot_longer(cols = c(4:6), names_to = "method", values_to = "proportion") %>%
+  unite("ID", Species, community, sep = "_", remove = F) %>%
+  mutate(method = ifelse(method == "true.prop", "pre-PCR", method),
+         method = ifelse(method == "mock1.mean", "corrected", method),
+         method = ifelse(method == "raw.mean", "post-PCR", method)) 
+  
+fig_df$method <- factor(fig_df$method , levels = c("pre-PCR", "post-PCR", "corrected"))  
+
+north2 <- fig_df %>%
+  filter(community == "north2") %>%
+  ggplot(aes(x = method, y = proportion, color = Species, group = ID)) + 
+  geom_point() + 
+  geom_line() +
+  scale_color_manual(values = my_colors) + 
+  theme_classic() + 
+  labs(x = "",
+       y = "proportional abundance (%)") +
+  scale_x_discrete(expand = expansion(add = c(0.1, 0.1))) + 
+  theme(axis.text = element_text(size = 10),
+        axis.title = element_text(size = 12),
+        legend.text = element_text(size = 10),
+        legend.title = element_text(size = 12),
+        axis.text.x = element_text(angle = 90, hjust = 0.95)) +
+  theme(legend.position = "none")
+
+middle <- fig_df %>%
+  filter(community == "middle") %>%
+  ggplot(aes(x = method, y = proportion, color = Species, group = ID)) + 
+  geom_point() + 
+  geom_line() +
+  scale_color_manual(values = my_colors) + 
+  theme_classic() + 
+  labs(x = "",
+       y = "proportional abundance (%)") +
+  scale_x_discrete(expand = expansion(add = c(0.1, 0.1))) + 
+  theme(axis.text = element_text(size = 10),
+        axis.title = element_text(size = 12),
+        legend.text = element_text(size = 10),
+        legend.title = element_text(size = 12),
+        axis.text.x = element_text(angle = 90, hjust = 0.95)) +
+  theme(legend.position = "none")
+
+north2_bar <- fig_df %>%
+  filter(community == "north2") %>%
+  ggplot(aes(x=method, y=proportion, fill=Species)) +
+  geom_bar(stat = "identity") + 
+  theme_bw() +
+  scale_fill_manual(values = my_colors) + 
+  #facet_grid(~community, scales = 'free') +
+  labs(
+    y = "proportional abundance (%)",
+    x = "") + 
+  theme(axis.text = element_text(size = 10),
+        axis.title = element_text(size = 12),
+    axis.text.x = element_text(angle = 90, hjust = 0.95),
+    legend.text = element_text(size = 10),
+    legend.key.size = unit(0.3, "cm"),
+    legend.position = "right"
+  )
+
+middle_bar <- fig_df %>%
+  filter(community == "middle") %>%
+  ggplot(aes(x=method, y=proportion, fill=Species)) +
+  geom_bar(stat = "identity") + 
+  theme_bw() +
+  scale_fill_manual(values = my_colors) + 
+  #facet_grid(~community, scales = 'free') +
+  labs(
+    y = "proportional abundance (%)",
+    x = "") + 
+  theme(axis.text = element_text(size = 10),
+        axis.title = element_text(size = 12),
+    axis.text.x = element_text(angle = 90, hjust = 0.95),
+    legend.text = element_text(size = 10),
+    legend.key.size = unit(0.3, "cm"),
+    legend.position = "right"
+  )
+```
+
+put together into one plot 
+```{r, fig.width=10, fig.height=4}
+library(patchwork)
+
+fig2 <- north2 + north2_bar + middle  + middle_bar + plot_layout(guides = 'collect') + plot_annotation(tag_levels = 'A') &
+    theme(plot.tag = element_text(face = 'bold'))
+fig2
+
+ggsave("fig2.png", plot = fig2, width = 10, height = 8, dpi = 300)
+```
+
+
 additional plots
 
 ```{r}
@@ -395,7 +489,7 @@ temp2 <- temp2 %>%
 temp3 <- temp2 %>%
   mutate(method = ifelse(method == "true.prop", "true proportion", method),
          method = ifelse(method == "mock1.mean", "mock adjusted", method),
-         method = ifelse(method == "raw.mean", "raw proportion", method)) 
+         method = ifelse(method == "raw.mean", "raw proportion", method))
 
 my_order <- c("true proportion", "raw proportion", "mock adjusted")
 temp3$method <- factor(temp3$method, levels = my_order)

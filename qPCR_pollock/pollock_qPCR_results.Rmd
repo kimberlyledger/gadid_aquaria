@@ -213,8 +213,8 @@ adapted from Allen et al. 2023: convert these proportions into absolute abundanc
 load quantitative metabarcoding read proportion 
 ```{r}
 metabar <- read.csv("~/gadid_aquaria/gadid_mb_aquaria/tank_mock_estimates.csv") %>%
-  filter(tank_ID %in% my_data_filtered$site_name) %>%
-  filter(n.tank.dissim == 0) #one tank (40) has tank dissimilarity flags from mb - will remove this from the analysis
+  filter(tank_ID %in% my_data_filtered$site_name) #%>%
+  #filter(n.tank.dissim == 0) #one tank (40) has tank dissimilarity flags from mb - will remove this from the analysis
 ```
 
 keep just the pollock metabarcoding results
@@ -310,8 +310,24 @@ combined_absconc <- all_metabar_absconc %>%
   left_join(tank_metadata_abundance, by = c("site_name", "Species")) %>%
   mutate(Species = ifelse(Species == "Boreogadus saida", "Arctic cod", Species),
          Species = ifelse(Species == "Gadus chalcogrammus", "Walleye pollock", Species),
-         Species = ifelse(Species == "Gadus macrocephalus", "Pacific cod", Species))
+         Species = ifelse(Species == "Gadus macrocephalus", "Pacific cod", Species)) %>%
+  mutate(ind_biomass = biomass/N)
 ```
+
+calcuate eDNA release rate per fish body weight
+```{r, fig.width=3, fig.height=2.5}
+release <- combined_absconc %>%
+  filter(Species == "Pacific cod") %>%
+  mutate(release = Conc_mean/N/ind_biomass) %>%
+  filter(N > 0)
+
+ggplot(data = release, aes(x=ind_biomass, y = release)) +
+  geom_point(cex = 2) +
+  theme_classic() + 
+  labs(x = "individual biomass (grams)",
+       y = "DNA release rate (copies per fish per mass)") 
+```
+
 
 
 the moment of truth.... plot vs biomass - first using log-conc
@@ -367,8 +383,8 @@ median(ac$Conc_mean)
 quantile(ac$Conc_mean, probs = 0.025)
 quantile(ac$Conc_mean, probs = 0.975)
 
-ac_lm1 <- lm(Conc_mean ~ biomass-1, data = ac)
-summary(ac_lm1)
+#ac_lm1 <- lm(Conc_mean ~ biomass-1, data = ac)
+#summary(ac_lm1)
 
 ac_lm2 <- lm(Conc_mean ~ biomass, data = ac)
 summary(ac_lm2)
@@ -381,8 +397,10 @@ ac_plot <- ac %>%
   #geom_smooth(aes(x=biomass,y=Conc_mean), method = "lm", formula = y ~ x -1, se = FALSE,color = "#6a6599") + 
   theme_classic() +
   scale_color_manual(values = "#6a6599") +
-  labs(x = "biomass",
-       y = "DNA concentration (copies per reaction)")
+  labs(x = "biomass (grams)",
+       y = "DNA concentration (copies per reaction)",
+        color = "") +
+  theme(legend.position = "top") 
 ac_plot
 ```
 
@@ -397,8 +415,8 @@ median(pc$Conc_mean)
 quantile(pc$Conc_mean, probs = 0.025)
 quantile(pc$Conc_mean, probs = 0.975)
 
-pc_lm1 <- lm(Conc_mean ~ biomass-1, data = pc)
-summary(pc_lm1)
+#pc_lm1 <- lm(Conc_mean ~ biomass-1, data = pc)
+#summary(pc_lm1)
 
 pc_lm2 <- lm(Conc_mean ~ biomass, data = pc)
 summary(pc_lm2)
@@ -411,8 +429,10 @@ pc_plot <- pc %>%
   #geom_smooth(aes(x=biomass,y=Conc_mean), method = "lm", formula = y ~ x -1, se = FALSE,color = "#79af97") + 
   theme_classic() +
   scale_color_manual(values = "#79af97") +
-  labs(x = "biomass",
-       y = "DNA concentration (copies per reaction)")
+  labs(x = "biomass (grams)",
+       y = "DNA concentration (copies per reaction)",
+        color = "") +
+  theme(legend.position = "top")
 pc_plot
 ```
 
@@ -427,7 +447,7 @@ combined_fig
 ```
 
 ```{r}
-#ggsave("my_figures/ac_pc_estimates.png", plot = combined_fig, width = 8, height = 4, dpi = 300)
+ggsave("my_figures/ac_pc_estimates_all.png", plot = combined_fig, width = 8, height = 4, dpi = 300)
 ```
 
 
