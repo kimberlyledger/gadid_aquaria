@@ -70,12 +70,12 @@ all <- raw_tanks_long %>%
 calculate fractional abundance and fractional ASM
 ```{r}
 metadata <- metadata %>%
-  mutate(AC_ind_mass = AC_biomass/AC_N) %>%
-  mutate(PC_ind_mass = PC_biomass/PC_N) %>%
-  mutate(WP_ind_mass = WP_biomass/WP_N) %>%
-  mutate(AC_ASM = (AC_ind_mass^0.65) * AC_N) %>%
-  mutate(PC_ASM = (PC_ind_mass^0.65) * PC_N) %>%
-  mutate(WP_ASM = (WP_ind_mass^0.65) * WP_N) %>%
+  #mutate(AC_ind_mass = AC_biomass/AC_N) %>%
+  #mutate(PC_ind_mass = PC_biomass/PC_N) %>%
+  #mutate(WP_ind_mass = WP_biomass/WP_N) %>%
+  mutate(AC_ASM = (AC_biomass^0.65)) %>%   ### this is a simplification of ((total AC biomass^0.65)/N of AC) * N of AC
+  mutate(PC_ASM = (PC_biomass^0.65)) %>%
+  mutate(WP_ASM = (WP_biomass^0.65)) %>%
   mutate(AC_N = ifelse(is.na(AC_N), 0, AC_N), 
          PC_N = ifelse(is.na(PC_N), 0, PC_N),
          WP_N = ifelse(is.na(WP_N), 0, WP_N),
@@ -104,7 +104,7 @@ all_long_biomass <- metadata %>%
 ## pivot fractional abundance and joing to metabarcoing reads
 ```{r}
 all_long_abundance <- metadata %>%
-  pivot_longer(cols = c(39:41), names_to = "Species", values_to = "F_Abundance") %>%
+  pivot_longer(cols = c(36:38), names_to = "Species", values_to = "F_Abundance") %>%
   mutate(Species = str_remove(Species, "_FN")) %>%
   mutate(F_Abundance = ifelse(is.na(F_Abundance), 0, F_Abundance)) %>%
   left_join(all, by = c("tank_ID", "Species"))
@@ -113,7 +113,7 @@ all_long_abundance <- metadata %>%
 ## pivot fractional ASM and joing to metabarcoing reads
 ```{r}
 all_long_ASM <- metadata %>%
-  pivot_longer(cols = c(43:45), names_to = "Species", values_to = "F_ASM") %>%
+  pivot_longer(cols = c(40:42), names_to = "Species", values_to = "F_ASM") %>%
   mutate(Species = str_remove(Species, "_fASM")) %>%
   mutate(F_ASM = ifelse(is.na(F_ASM), 0, F_ASM)) %>%
   left_join(all, by = c("tank_ID", "Species"))
@@ -147,89 +147,6 @@ temp2 <- metadata %>%
 
 #write.csv(temp2, "allometry_mass.csv") 
 #write.csv(temp1, "allometry_N.csv")
-```
-
-a quick aside for 
-calculate false positive rates
-```{r}
-# temp <- all_long %>%
-#   filter(Fish_pres == 1) %>%
-#   mutate(reads_present = ifelse(Mean > 0.005, "yes", "no")) %>%
-#   filter(reads_present == "yes") %>%
-#   filter(Fbiomass == 0) %>%
-#   arrange(tank_ID)
-# temp %>%
-#   ggplot(aes(x = Mean, fill = Species)) +
-#     geom_histogram()
-# t3 <- all_long %>%
-#   filter(Fish_pres == 1) %>%
-#   select(tank_ID, Tot_biomass) %>%
-#   unique() #%>%
-#   #summarize(MEAN= mean(Tot_biomass),
-#   #          SD = sd(Tot_biomass))
-# 
-# mean(t3$Tot_biomass)  #average tank biomass
-# t.test(t3$Tot_biomass)$conf.int
-# 
-# temp %>%
-#   filter(Mean < 0.5) %>%
-#   summarize(mean = mean(Mean),
-#             SD=sd(Mean))
-# 
-# t2 <- temp %>%
-#   filter(Mean < 0.5)
-# 
-# t.test(t2$Mean)$conf.int 
-```
-
-
-### figure S3A 
-plot uncorrected (raw) read proportions vs biomass and color by species - only including samples with fish present 
-```{r}
-mypal <- c("#6a6599", "#79af97", "#00a1d5")   #purple, green, blue
-
-fig_raw_biomass <- all_long %>%
-  filter(Fish_pres == "1") %>%
-  filter(n.tank.dissim == "0") %>%
-  mutate(Species = ifelse(Species == "AC", "Arctic cod", Species)) %>%
-  mutate(Species = ifelse(Species == "PC", "Pacific cod", Species)) %>%
-  mutate(Species = ifelse(Species == "WP", "Walleye pollock", Species)) %>%
-  ggplot() + 
-  geom_errorbar(aes(x=Fbiomass,ymin=raw.q.025,ymax=raw.q.975,color=Species),width=0, size = .5) +
-  geom_point(aes(x=Fbiomass,y=raw.Mean,color=Species), size = 2) +
-  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "black")  + 
-  scale_color_manual(values = mypal) + 
-  theme_classic() + 
-    labs(x = "proportional biomass",
-       y = "uncorrected eDNA read proportion") +
-  theme(axis.text = element_text(size = 12),
-        axis.title = element_text(size = 14),
-        legend.text = element_text(size = 12),
-        legend.title = element_text(size = 14))
-fig_raw_biomass
-```
-
-### old figure 3A 
-```{r}
-fig_mock_biomass <- all_long %>%
-  filter(Fish_pres == "1") %>%
-  filter(n.tank.dissim == "0") %>%
-  mutate(Species = ifelse(Species == "AC", "Arctic cod", Species)) %>%
-  mutate(Species = ifelse(Species == "PC", "Pacific cod", Species)) %>%
-  mutate(Species = ifelse(Species == "WP", "Walleye pollock", Species)) %>%
-  ggplot() + 
-  geom_errorbar(aes(x=Fbiomass,ymin=mock.q.025,ymax=mock.q.975,color=Species),width=0, size = .5) +
-  geom_point(aes(x=Fbiomass,y=mock.Mean,color=Species), size = 2) +
-  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "black")  + 
-  scale_color_manual(values = mypal) + 
-  theme_classic() + 
-    labs(x = "proportional biomass",
-       y = "corrected eDNA read proportion") +
-  theme(axis.text = element_text(size = 12),
-        axis.title = element_text(size = 14),
-        legend.text = element_text(size = 12),
-        legend.title = element_text(size = 14))
-fig_mock_biomass
 ```
 
 
@@ -271,12 +188,12 @@ fig_mock_biomass_by_spp_coloredtanks <- all_long_biomass %>%
   mutate(Species = ifelse(Species == "AC", "Arctic cod", Species)) %>%
   mutate(Species = ifelse(Species == "PC", "Pacific cod", Species)) %>%
   mutate(Species = ifelse(Species == "WP", "Walleye pollock", Species)) %>%
-  mutate(to_color = ifelse(tank_ID %in% c("3", "46", "2", "10", "71", "80"), tank_ID, NA)) %>%
+  mutate(to_color = ifelse(tank_ID %in% c("3", "46", "2", "10", "71", "80", "89"), tank_ID, NA)) %>%
   ggplot() + 
   geom_errorbar(aes(x=Fbiomass,ymin=mock.q.025,ymax=mock.q.975,color=to_color),width=0, size = .5) +
   geom_point(aes(x=Fbiomass,y=mock.Mean,color=to_color), size = 2) +
   #geom_smooth(aes(x=Fbiomass,y=mock.Mean,color=Species), method = "lm", formula = y ~ x - 1, se = FALSE) +
-  geom_smooth(aes(x=Fbiomass,y=mock.Mean), method = "lm", formula = y ~ x, se = FALSE) +
+  #geom_smooth(aes(x=Fbiomass,y=mock.Mean), method = "lm", formula = y ~ x, se = FALSE, color = "light grey") +
   geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "black")  + 
   facet_wrap(~Species) +
   #scale_color_manual(values = mypal) + 
@@ -292,50 +209,10 @@ fig_mock_biomass_by_spp_coloredtanks <- all_long_biomass %>%
 fig_mock_biomass_by_spp_coloredtanks
 ```
 
-## trying out a ternary plot 
-```{r}
-library(ggtern)
 
-tern_df_true <- all_long %>%
-  filter(Fish_pres == "1") %>%
-  filter(n.tank.dissim == "0") %>%
-  filter(N_spp > 1) %>%
-  select(tank_ID, Species, Fbiomass) %>%
-  pivot_wider(names_from = Species, values_from = Fbiomass)
-
-tern_df_obs <- all_long %>%
-  filter(Fish_pres == "1") %>%
-  filter(n.tank.dissim == "0") %>%
-  filter(N_spp > 1) %>%
-  select(tank_ID, Species, mock.Mean) %>%
-  pivot_wider(names_from = Species, values_from = mock.Mean)
-
-ternary_plot_true <- ggtern(data = tern_df_true, aes(x = AC, y = PC, z = WP, color = tank_ID)) +
-  geom_point(size = 3) +                   # Plot points
-  geom_line(aes(group = tank_ID), size = 1) + # Connect points for each type
-  theme_minimal() +                        # Use a minimal theme
-  labs(title = "Ternary Plot of Species Compositions",
-       x = "Arctic cod",
-       y = "Pacific cod",
-       z = "Walleye pollock") +  
-  theme(legend.position = "right")
-ternary_plot_true
-
-ternary_plot_obs <- ggtern(data = tern_df_obs, aes(x = AC, y = PC, z = WP, color = tank_ID)) +
-  geom_point(size = 3) +                   # Plot points
-  geom_line(aes(group = tank_ID), size = 1) + # Connect points for each type
-  theme_minimal() +                        # Use a minimal theme
-  labs(title = "Ternary Plot of Species Compositions",
-       x = "Arctic cod",
-       y = "Pacific cod",
-       z = "Walleye pollock") + 
-  theme(legend.position = "right")
-ternary_plot_obs
-```
 
 ## try coloring by tank 
-### new figure 3
-facet by species and add lines of best fit. 
+color by tank ID
 ```{r}
 fig_mock_biomass_by_spp_coloredtanks <- all_long_biomass %>%
   filter(Fish_pres == "1") %>%
@@ -362,40 +239,9 @@ fig_mock_biomass_by_spp_coloredtanks <- all_long_biomass %>%
 fig_mock_biomass_by_spp_coloredtanks
 ```
 
-plot a couple tanks to illustrate non-independence 
-```{r}
-mypal <- c("#6a6599", "#79af97", "#00a1d5")   #purple, green, blue
-
-fig_mock_biomass_by_tank <- all_long %>%
-  filter(Fish_pres == "1") %>%
-  filter(n.tank.dissim == "0") %>%
-  filter(tank_ID %in% c("3", "46", "2", "10", "71", "80")) %>%
-  mutate(tank_ID = as.numeric(tank_ID)) %>%
-  mutate(Species = ifelse(Species == "AC", "Arctic cod", Species)) %>%
-  mutate(Species = ifelse(Species == "PC", "Pacific cod", Species)) %>%
-  mutate(Species = ifelse(Species == "WP", "Walleye pollock", Species)) %>%
-  ggplot() + 
-  geom_errorbar(aes(x=Fbiomass,ymin=mock.q.025,ymax=mock.q.975,color=Species),width=0, size = .5) +
-  geom_point(aes(x=Fbiomass,y=mock.Mean,color=Species), size = 2) +
-  #geom_smooth(aes(x=Fbiomass,y=mock.Mean,color=Species), method = "lm", formula = y ~ x - 1, se = FALSE) +
-  geom_smooth(aes(x=Fbiomass,y=mock.Mean,color=Species), method = "lm", formula = y ~ x, se = FALSE) +
-  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "black")  + 
-  facet_wrap(~tank_ID) +
-  scale_color_manual(values = mypal) + 
-  theme_bw() + 
-    labs(x = "proportional biomass",
-       y = "corrected eDNA read proportion") +
-  theme(axis.text = element_text(size = 10),
-        axis.title = element_text(size = 14)) + 
-        #legend.text = element_text(size = 12),
-        #legend.title = element_text(size = 14)
-  xlim(0,1) +
-  ylim(0,1)
-fig_mock_biomass_by_tank
-```
 
 ```{r}
-#ggsave("figures/raw_read_biomass_by_tank.png", plot = fig_mock_biomass_by_tank, width = 9, height = 6, dpi = 300)
+#ggsave("figures/biomass_by_tank.png", plot = fig_mock_biomass_by_spp_coloredtanks, width = 8.5, height = 3.5, dpi = 300)
 ```
 
 
@@ -476,58 +322,6 @@ summary(mock_mod_wp_biomass)
 
 
 ## now for abundance 
-
-old figiure S4A 
-plot abundance 
-```{r}
-fig_mock_abund <- all_long_abundance %>%
-  filter(n.tank.dissim == "0") %>%
-  filter(Fish_pres == "1") %>%
-  mutate(Species = ifelse(Species == "AC", "Arctic cod", Species)) %>%
-  mutate(Species = ifelse(Species == "PC", "Pacific cod", Species)) %>%
-  mutate(Species = ifelse(Species == "WP", "Walleye pollock", Species)) %>%
-  ggplot() + 
-  geom_errorbar(aes(x=F_Abundance,ymin=mock.q.025,ymax=mock.q.975,color=Species),width=0, size = 0.5) +
-  geom_point(aes(x=F_Abundance,y=mock.Mean,color=Species), size = 2) +
-  #geom_smooth(aes(x=F_Abundance,y=Mean,color=Species,fill=Species), method = "lm", se = FALSE, alpha = 0.5) +
-  #geom_smooth(aes(x=F_Abundance,y=Mean), color = "black", linetype = "dashed",method = "lm", se = FALSE) +
-  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "black")  + 
-  scale_color_manual(values = mypal) + 
-  theme_classic() + 
-  labs(x = "proportional abundance",
-       y = "corrected eDNA read proportion") +
-  theme(axis.text = element_text(size = 12),
-        axis.title = element_text(size = 14),
-        legend.text = element_text(size = 12),
-        legend.title = element_text(size = 14))
-fig_mock_abund
-```
-
-old figiure S4B 
-plot abundance
-```{r}
-fig_raw_abund <- all_long_abundance %>%
-  filter(n.tank.dissim == "0") %>%
-  filter(Fish_pres == "1") %>%
-  mutate(Species = ifelse(Species == "AC", "Arctic cod", Species)) %>%
-  mutate(Species = ifelse(Species == "PC", "Pacific cod", Species)) %>%
-  mutate(Species = ifelse(Species == "WP", "Walleye pollock", Species)) %>%
-  ggplot() + 
-  geom_errorbar(aes(x=F_Abundance,ymin=raw.q.025,ymax=raw.q.975,color=Species),width=0, size = 0.5) +
-  geom_point(aes(x=F_Abundance,y=raw.Mean,color=Species), size = 2) +
-  #geom_smooth(aes(x=F_Abundance,y=Mean,color=Species,fill=Species), method = "lm", se = FALSE, alpha = 0.5) +
-  #geom_smooth(aes(x=F_Abundance,y=Mean), color = "black", linetype = "dashed",method = "lm", se = FALSE) +
-  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "black")  + 
-  scale_color_manual(values = mypal) + 
-  theme_classic() + 
-  labs(x = "proportional abundance",
-       y = "uncorrected eDNA read proportion") +
-  theme(axis.text = element_text(size = 12),
-        axis.title = element_text(size = 14),
-        legend.text = element_text(size = 12),
-        legend.title = element_text(size = 14))
-fig_raw_abund
-```
 
 - new figure S4A 
 ```{r}
@@ -762,6 +556,19 @@ summary(mock_mod_wp_ASM)
 ```
 
 
+## compare AIC of models
+```{r}
+AIC(mock_mod_ac_biomass, mock_mod_ac_ASM, mock_mod_ac_abund)
+AIC(mock_mod_pc_biomass, mock_mod_pc_ASM, mock_mod_pc_abund)
+AIC(mock_mod_wp_biomass, mock_mod_wp_ASM, mock_mod_wp_abund)
+```
+
+```{r}
+AIC(raw_mod_ac_biomass, raw_mod_ac_ASM, raw_mod_ac_abund)
+AIC(raw_mod_pc_biomass, raw_mod_pc_ASM, raw_mod_pc_abund)
+AIC(raw_mod_wp_biomass, raw_mod_wp_ASM, raw_mod_wp_abund)
+```
+
 
 ### pcod - individual analysis... 
 make individual plots for each species on their own - using 1:1 line 
@@ -781,7 +588,7 @@ fig_abund_PC_age <- all_long_abundance %>%
   #geom_smooth(aes(x=F_Abundance,y=Mean,color=Species,fill=Species), method = "lm", se = FALSE, alpha = 0.5) +
   #geom_smooth(aes(x=F_Abundance,y=Mean), color = "black", linetype = "dashed",method = "lm", se = FALSE) +
   geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "black")  + 
-  scale_color_material("green") + 
+  #scale_color_material("green") + 
   #scale_color_manual(values = "#79af97") +   #"#6a6599", "#79af97", "#00a1d5")   #purple, green, blue
   theme_classic() + 
   labs(x = "proportional abundance",
@@ -804,6 +611,9 @@ plot abundance - with biomass scale
 pc_abund <- all_long_abundance %>%
   filter(n.tank.dissim == "0") %>%
   filter(Fish_pres == "1") %>%
+  mutate(AC_ind_mass = AC_biomass/AC_N) %>%
+  mutate(PC_ind_mass = PC_biomass/PC_N) %>%
+  mutate(WP_ind_mass = WP_biomass/WP_N) %>%
   select(F_Abundance, mock.Mean, mock.q.025, mock.q.975, Species, AC_ind_mass, PC_ind_mass, WP_ind_mass) %>%
   filter(F_Abundance > 0) %>%
   pivot_longer(cols = c(6:8), values_to = "biomass_per_N") %>%
@@ -851,6 +661,9 @@ plot ASM - with biomass scale
 pc_ASM <- all_long_ASM %>%
   filter(n.tank.dissim == "0") %>%
   filter(Fish_pres == "1") %>%
+  mutate(AC_ind_mass = AC_biomass/AC_N) %>%
+  mutate(PC_ind_mass = PC_biomass/PC_N) %>%
+  mutate(WP_ind_mass = WP_biomass/WP_N) %>%
   select(F_ASM, mock.Mean, mock.q.025, mock.q.975, Species, AC_ind_mass, PC_ind_mass, WP_ind_mass) %>%
   filter(F_ASM > 0) %>%
   pivot_longer(cols = c(6:8), values_to = "biomass_per_N") %>%
@@ -893,6 +706,9 @@ plot biomass - with biomass scale
 pc_biomass <- all_long_biomass %>%
   filter(n.tank.dissim == "0") %>%
   filter(Fish_pres == "1") %>%
+  mutate(AC_ind_mass = AC_biomass/AC_N) %>%
+  mutate(PC_ind_mass = PC_biomass/PC_N) %>%
+  mutate(WP_ind_mass = WP_biomass/WP_N) %>%
   select(Fbiomass, mock.Mean, mock.q.025, mock.q.975, Species, AC_ind_mass, PC_ind_mass, WP_ind_mass) %>%
   filter(Fbiomass > 0) %>%
   pivot_longer(cols = c(6:8), values_to = "biomass_per_N") %>%
@@ -932,17 +748,8 @@ fig_biomass_w_ind_biomass
 
 now explore the relationship between mass and the read proportion v abundance proportion residuals 
 
-export figure of abundance, ASM, biomass for PC
-```{r, fig.width=10, fig.height=4}
-library(patchwork)
-
-pc_fig <- fig_abund_w_ind_biomass + fig_ASM_w_ind_biomass + fig_biomass_w_ind_biomass + plot_annotation(tag_levels = 'A') + plot_layout(guides = 'collect') &
-    theme(plot.tag = element_text(face = 'bold'))
-pc_fig
-```
-
 ```{r}
-ggsave("figures/Pcod_proportions.png", plot = pc_fig, width = 12, height = 4, dpi = 300)
+#ggsave("figures/Pcod_proportions.png", plot = pc_fig, width = 12, height = 4, dpi = 300)
 ```
 
 
@@ -1108,124 +915,4 @@ all_together
 
 ```{r}
 #ggsave("figures/Pcod_biomass_abund_w_residuals.png", plot = all_together, width = 8.5, height = 6, dpi = 300)
-```
-
-
-
-
-
-
-
-
-aitchinson distance
-
-make true.matrix
-```{r}
-filtered <- all_long %>%
-  filter(n.tank.dissim != "2") %>%
-  filter(Fish_pres == "1") %>%
-  filter(N_spp > 1)
-
-true.mat <- filtered %>% 
-  select(Species, tank_ID, Fbiomass) %>%
-  pivot_wider(values_from = "Fbiomass", names_from = "Species") %>%
-  as.data.frame()
-
-rownames(true.mat) <- true.mat$tank_ID
-true.mat <-  true.mat %>% ungroup() %>% dplyr::select(-tank_ID)
-```
-
-make containers for outputs
-```{r}
-# Make containers for each type of output
-make.cont <- function(dat){
-  #out <-  matrix(0,max(dat$comm_idx),max(dat$sp_idx))
-  out <-  matrix(0,31,3)                                       ## change to be number of tanks and spp
-  rownames(out) <- dat %>% distinct(tank_ID) %>% pull(tank_ID)
-  colnames(out) <- dat %>% distinct(Species) %>% pull(Species)
-  return(out)
-}
-
-mock1.out <- make.cont(filtered)
-mock.sp   <- data.frame(Species=filtered %>% distinct(Species) %>% pull(Species))
-mock.comm <- data.frame(community=filtered %>% distinct(tank_ID) %>% pull(tank_ID))
-
-raw1.out <- make.cont(filtered)
-raw.sp   <- data.frame(Species=filtered %>% distinct(Species) %>% pull(Species))
-raw.comm <- data.frame(community=filtered %>% distinct(tank_ID) %>% pull(tank_ID))
-```
-
-```{r}
-#library(robCompositions)  #won't install, dependency "VIM" not available... 
-
-# loop over mock1
-mock1.AD <- data.frame(AD = rep(0,nrow(true.mat)))
-rownames(mock1.AD) <- rownames(true.mat)
-
-# loop over raw
-raw1.AD <- data.frame(AD = rep(0,nrow(true.mat)))
-rownames(raw1.AD) <- rownames(true.mat)
-
-m_tanks <- filtered %>%
-  select(tank_ID, Species, mock.Mean) %>%
-  pivot_wider(names_from = "Species", values_from = "mock.Mean") %>%
-  as.data.frame()
-
-r_tanks <- filtered %>%
-  select(tank_ID, Species, raw.Mean) %>%
-  pivot_wider(names_from = "Species", values_from = "raw.Mean") %>%
-  as.data.frame()
-
-rownames(m_tanks) <- m_tanks$tank_ID
-m_tanks <-  m_tanks %>% dplyr::select(-tank_ID)
-
-rownames(r_tanks) <- r_tanks$tank_ID
-r_tanks <-  r_tanks %>% dplyr::select(-tank_ID)
-
-## since i can't install robCompositions here, i'm doing it on my personal computer and then going to read in table of results 
-
-#saveRDS(true.mat, "true.mat.RDS")
-#saveRDS(m_tanks, "m_tanks.RDS")
-#saveRDS(r_tanks, "r_tanks.RDS")
-```
-
-tank AD results 
-```{r}
-all.AD <- readRDS("/home/kimberly.ledger/gadid_aquaria/gadid_mb_aquaria/tank_ADs.RDS")
-```
-
-okay, this is interesting.. 
-```{r}
-all.AD %>%
-  group_by(model) %>%
-  summarize(mean_AD = mean(AD),
-            sd_AD = sd(AD)) 
-```
-
-okay, i can't break AD down by species since the values are representative of the entire tank composition, but i could compare AD between relatively even tanks vs skewed tanks..
-
-```{r}
-skewed <- filtered %>%
-  #filter(N_spp == 2) %>%
-  filter(Fbiomass != 0) %>%
-  filter(Fbiomass < 0.25)
-```
-
-
-```{r}
-all.AD %>%
-  #filter(Calibration == "Mock") %>%
-  filter(tank_ID %in% skewed$tank_ID) %>%
-  group_by(model) %>%
-  summarize(mean_AD = mean(AD),
-            sd_AD = sd(AD)) 
-```
-
-```{r}
-all.AD %>%
-  #filter(Calibration == "Mock") %>%
-  filter(!tank_ID %in% skewed$tank_ID) %>%
-  group_by(model) %>%
-  summarize(mean_AD = mean(AD),
-            sd_AD = sd(AD)) 
 ```

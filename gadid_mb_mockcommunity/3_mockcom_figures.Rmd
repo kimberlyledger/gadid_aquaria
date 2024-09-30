@@ -267,104 +267,6 @@ all.dat$Species <- as.factor(all.dat$Species)
 levels(all.dat$Species)
 ```
 
-
-#raw data 
-```{r}
-raw_plot <- all.dat %>%
-  ggplot() + 
-  geom_errorbar(aes(x=true.prop,ymin=raw.2.5,ymax=raw.97.5,color=Species),width=0, size = .5) +
-  geom_point(aes(x=true.prop,y=raw.mean,color=Species), size = 2) +
-  geom_smooth(aes(x=true.prop,y=raw.mean,color=Species), method = "lm", formula = y ~ x, se = FALSE) +
-  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "black")  + 
-  scale_color_manual(values = my_colors) + 
-  theme_classic() + 
-    labs(x = "true proportion",
-       y = "uncorrected eDNA read proportion") +
-  theme(axis.text = element_text(size = 12),
-        axis.title = element_text(size = 12),
-        legend.text = element_text(size = 10),
-        legend.title = element_text(size = 12))
-
-raw_plot
-```
-
-#mock-adjusted data 
-```{r}
-mock_plot <- all.dat %>%
-  ggplot() + 
-  geom_errorbar(aes(x=true.prop,ymin=mock1.2.5,ymax=mock1.97.5,color=Species),width=0, size = .5) +
-  geom_point(aes(x=true.prop,y=mock1.mean,color=Species), size = 2) +
-  geom_smooth(aes(x=true.prop,y=mock1.mean,color=Species), method = "lm", formula = y ~ x, se = FALSE) +
-  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "black")  + 
-  scale_color_manual(values = my_colors) + 
-  theme_classic() + 
-    labs(x = "true proportion",
-       y = "corrected eDNA read proportion") +
-  theme(axis.text = element_text(size = 12),
-        axis.title = element_text(size = 12),
-        legend.text = element_text(size = 10),
-        legend.title = element_text(size = 12))
-mock_plot
-```
-
-put together into one plot 
-```{r, fig.width=10, fig.height=4}
-library(patchwork)
-
-combined_fig <- raw_plot + mock_plot + plot_layout(guides = 'collect') + plot_annotation(tag_levels = 'A') &
-    theme(plot.tag = element_text(face = 'bold'))
-combined_fig
-
-#ggsave("raw_v_mock.png", plot = combined_fig, width = 10, height = 4, dpi = 300)
-```
-
-now let's calculate slopes/r2 for those models
-```{r}
-arctic <- all.dat %>%
-  filter(Species == "Arctic cod")
-saffron <- all.dat %>%
-  filter(Species == "Saffron cod")
-pollock <- all.dat %>%
-  filter(Species == "Walleye pollock")
-pacific <- all.dat %>%
-  filter(Species == "Pacific cod")
-tomcod <- all.dat %>%
-  filter(Species == "Pacific tomcod")
-polar <- all.dat %>%
-  filter(Species == "Polar cod")
-
-arctic_raw <- lm(raw.mean ~ true.prop, data = arctic)
-summary(arctic_raw)
-arctic_mock <- lm(mock1.mean ~ true.prop, data = arctic)
-summary(arctic_mock)
-
-saffron_raw <- lm(raw.mean ~ true.prop, data = saffron)
-summary(saffron_raw)
-saffron_mock <- lm(mock1.mean ~ true.prop, data = saffron)
-summary(saffron_mock)
-
-pollock_raw <- lm(raw.mean ~ true.prop, data = pollock)
-summary(pollock_raw)
-pollock_mock <- lm(mock1.mean ~ true.prop, data = pollock)
-summary(pollock_mock)
-
-pacific_raw <- lm(raw.mean ~ true.prop, data = pacific)
-summary(pacific_raw)
-pacific_mock <- lm(mock1.mean ~ true.prop, data = pacific)
-summary(pacific_mock)
-
-tomcod_raw <- lm(raw.mean ~ true.prop, data = tomcod)
-summary(tomcod_raw)
-tomcod_mock <- lm(mock1.mean ~ true.prop, data = tomcod)
-summary(tomcod_mock)
-
-polar_raw <- lm(raw.mean ~ true.prop, data = polar)
-summary(polar_raw)
-polar_mock <- lm(mock1.mean ~ true.prop, data = polar)
-summary(polar_mock)
-```
-
-
 according to the even mock community, let me plot the proportional abundance pre-PCR vs post-PCR 
 ```{r}
 fig_df <- all.dat %>%
@@ -380,12 +282,13 @@ fig_df$method <- factor(fig_df$method , levels = c("pre-PCR", "post-PCR", "corre
 north2 <- fig_df %>%
   filter(community == "north2") %>%
   ggplot(aes(x = method, y = proportion, color = Species, group = ID)) + 
-  geom_point() + 
-  geom_line() +
+  geom_point(size = 2) + 
+  geom_line(size = 1.5) +
   scale_color_manual(values = my_colors) + 
   theme_classic() + 
   labs(x = "",
-       y = "proportional abundance (%)") +
+       y = "proportional abundance (%)",
+       title = "north2") +
   scale_x_discrete(expand = expansion(add = c(0.1, 0.1))) + 
   theme(axis.text = element_text(size = 10),
         axis.title = element_text(size = 12),
@@ -397,12 +300,13 @@ north2 <- fig_df %>%
 middle <- fig_df %>%
   filter(community == "middle") %>%
   ggplot(aes(x = method, y = proportion, color = Species, group = ID)) + 
-  geom_point() + 
-  geom_line() +
+  geom_point(size = 2) + 
+  geom_line(size = 1.5) +
   scale_color_manual(values = my_colors) + 
   theme_classic() + 
   labs(x = "",
-       y = "proportional abundance (%)") +
+       y = "proportional abundance (%)",
+       title = "middle") +
   scale_x_discrete(expand = expansion(add = c(0.1, 0.1))) + 
   theme(axis.text = element_text(size = 10),
         axis.title = element_text(size = 12),
@@ -420,11 +324,13 @@ north2_bar <- fig_df %>%
   #facet_grid(~community, scales = 'free') +
   labs(
     y = "proportional abundance (%)",
-    x = "") + 
+    x = "",
+    title = "north2") + 
   theme(axis.text = element_text(size = 10),
         axis.title = element_text(size = 12),
     axis.text.x = element_text(angle = 90, hjust = 0.95),
-    legend.text = element_text(size = 10),
+    legend.text = element_text(size = 12),
+    legend.title = element_text(size = 14),
     legend.key.size = unit(0.3, "cm"),
     legend.position = "right"
   )
@@ -438,11 +344,13 @@ middle_bar <- fig_df %>%
   #facet_grid(~community, scales = 'free') +
   labs(
     y = "proportional abundance (%)",
-    x = "") + 
+    x = "",
+    title = "middle") + 
   theme(axis.text = element_text(size = 10),
         axis.title = element_text(size = 12),
     axis.text.x = element_text(angle = 90, hjust = 0.95),
-    legend.text = element_text(size = 10),
+    legend.text = element_text(size = 12),
+    legend.title = element_text(size = 14),
     legend.key.size = unit(0.3, "cm"),
     legend.position = "right"
   )
@@ -456,7 +364,7 @@ fig2 <- north2 + north2_bar + middle  + middle_bar + plot_layout(guides = 'colle
     theme(plot.tag = element_text(face = 'bold'))
 fig2
 
-ggsave("fig2.png", plot = fig2, width = 10, height = 8, dpi = 300)
+ggsave("fig2_updated.png", plot = fig2, width = 10, height = 8, dpi = 300)
 ```
 
 

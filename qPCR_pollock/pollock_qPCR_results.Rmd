@@ -225,18 +225,6 @@ pollock_metabar <- metabar %>%
 ```
 
 
-calculate C(amplifiable) = C(qPCR of reference)/Proportion(reference) - this uses log10 versions of copy number
-```{r}
-# C_amp_logconc <- pollock_metabar %>%
-#   left_join(my_data_filtered, by = "site_name") %>%
-#   mutate(C_amp_mean = MEAN/Mean) %>% #  ,
-#         # C_amp_q.025 = q.025.y/q.025.x,         ### need to figure out how to handle quartiles 
-#         # C_amp_median = Median.y/Median.x,
-#         # C_amp_q.975 = q.975.y/q.975.x) %>%  
-#   #select(site_name, C_amp_mean, C_amp_q.025, C_amp_median, C_amp_q.975)
-#   select(site_name, C_amp_mean)
-```
-
 calculate C(amplifiable) = C(qPCR of reference)/Proportion(reference)
 do this for non-log10 estimates of qPCR concentration 
 ```{r}
@@ -254,14 +242,6 @@ C_amp_absconc <- pollock_metabar %>%
 
 join back to full metabarcoding results and calculate DNA concentration by species and tank 
 ```{r}
-# all_metabar_logconc <- metabar %>%
-#   rename(site_name = tank_ID) %>%
-#   left_join(C_amp_logconc) %>%
-#   mutate(Conc_mean = C_amp_mean*Mean) #,
-#          #Conc_q.025 = C_amp_q.025*q.025,
-#          #Conc_median = C_amp_median*Median,
-#          #Conc_q.975 = C_amp_q.975*q.975)
-
 all_metabar_absconc <- metabar %>%
   rename(site_name = tank_ID) %>%
   left_join(C_amp_absconc) %>%
@@ -270,14 +250,6 @@ all_metabar_absconc <- metabar %>%
          #Conc_median = C_amp_median*Median,
          #Conc_q.975 = C_amp_q.975*q.975)
 ```
-
-are these the same thing??? 
-```{r}
-#all_metabar_logconc$temp <- 10^all_metabar_logconc$Conc_mean
-```
-
-okay, values are no longer the same thing... need to figure out which one is correct to be using
-but i have the feeling it's the absconc table. 
 
 join back to the tank metadata
 ```{r}
@@ -298,13 +270,6 @@ tank_metadata_abundance <- tank_metadata %>%
          Species = ifelse(Species == "WP", "Gadus chalcogrammus", Species),
          Species = ifelse(Species == "PC", "Gadus macrocephalus", Species))
 
-# combined_logconc <- all_metabar_logconc %>%
-#   left_join(tank_metadata_biomass, by = c("site_name", "Species")) %>%
-#   left_join(tank_metadata_abundance, by = c("site_name", "Species")) %>%
-#   mutate(Species = ifelse(Species == "Boreogadus saida", "Arctic cod", Species),
-#          Species = ifelse(Species == "Gadus chalcogrammus", "Walleye pollock", Species),
-#          Species = ifelse(Species == "Gadus macrocephalus", "Pacific cod", Species))
-
 combined_absconc <- all_metabar_absconc %>%
   left_join(tank_metadata_biomass, by = c("site_name", "Species")) %>%
   left_join(tank_metadata_abundance, by = c("site_name", "Species")) %>%
@@ -312,40 +277,6 @@ combined_absconc <- all_metabar_absconc %>%
          Species = ifelse(Species == "Gadus chalcogrammus", "Walleye pollock", Species),
          Species = ifelse(Species == "Gadus macrocephalus", "Pacific cod", Species)) %>%
   mutate(ind_biomass = biomass/N)
-```
-
-calcuate eDNA release rate per fish body weight
-```{r, fig.width=3, fig.height=2.5}
-release <- combined_absconc %>%
-  filter(Species == "Pacific cod") %>%
-  mutate(release = Conc_mean/N/ind_biomass) %>%
-  filter(N > 0)
-
-ggplot(data = release, aes(x=ind_biomass, y = release)) +
-  geom_point(cex = 2) +
-  theme_classic() + 
-  labs(x = "individual biomass (grams)",
-       y = "DNA release rate (copies per fish per mass)") 
-```
-
-
-
-the moment of truth.... plot vs biomass - first using log-conc
-```{r}
-# mypal <- c("#6a6599", "#79af97", "#00a1d5")   #purple, green, blue
-# 
-# combined_logconc %>%
-#   #filter(biomass < 5000) %>%
-#   filter(biomass > 0) %>%
-#   ggplot() + 
-#   geom_point(aes(x=log10(biomass), y=Conc_mean, color = Species), cex = 2) + 
-#   #geom_errorbar(aes(x=log10(biomass), y=Conc_mean, ymin = Conc_q.025, ymax = Conc_q.975, color = Species), width = 0) +
-#   geom_smooth(aes(x=log10(biomass),y=Conc_mean,color=Species), method = "lm", formula = y ~ x, se = FALSE, linetype = "dashed") + 
-#   geom_smooth(aes(x=log10(biomass),y=Conc_mean,color=Species), method = "lm", formula = y ~ x -1, se = FALSE) + 
-#   theme_classic() + 
-#   scale_color_manual(values = mypal) + 
-#   labs(x = "log10(biomass)",
-#        y = "log10(DNA copy number)") 
 ```
 
 
@@ -370,7 +301,6 @@ combined_absconc %>%
 
 okay, since the species estimates are not independent, plot just one species at a time??? 
 also run linear models 
-
 
 arctic cod - biomass vs DNA copies  
 ```{r}
@@ -520,22 +450,6 @@ fig_AD_binary
 
 maybe just focus on error in WP proportion??? 
 ```{r}
-# wp_error <- combined_absconc %>%
-#   filter(Species == "Walleye pollock") %>%
-#   mutate(error = abs(Mean - WP_Fbiomass)) %>%
-#   mutate(relative = error/Mean) %>%
-#   arrange(desc(relative)) %>%
-#   select(site_name, relative)
-# wp_error
-# 
-# wp_error_2 <- combined_absconc %>%
-#   filter(Species == "Walleye pollock") %>%
-#   mutate(error = abs(WP_Fbiomass - Mean)) %>%
-#   mutate(relative = error/WP_Fbiomass) %>%
-#   arrange(desc(relative)) %>%
-#   select(site_name, relative)
-# wp_error_2
-
 wp_diff <- combined_absconc %>%
   filter(Species == "Walleye pollock") %>%
   mutate(difference = abs((Mean - WP_Fbiomass) / ((Mean + WP_Fbiomass)/2))) %>%
@@ -618,89 +532,3 @@ fig_binary
 #ggsave("my_figures/bm_cn_wp_gradient.png", plot = fig_gradient, width = 8, height = 4, dpi = 300)
 #ggsave("my_figures/bm_cn_wp_binary.png", plot = fig_binary, width = 8, height = 4, dpi = 300)
 ```
-
-remake ac and pc figures/linear model and remove tanks with <25% WP biomass 
-
-```{r}
-ac_reduced <- combined_absconc %>%
-  filter(Species == "Arctic cod") %>%
-  #filter(biomass > 0) %>%
-  filter(difference < 0.3)
-
-mean(ac$Conc_mean)
-median(ac$Conc_mean)
-quantile(ac$Conc_mean, probs = 0.025)
-quantile(ac$Conc_mean, probs = 0.975)
-
-ac_lm3 <- lm(Conc_mean ~ biomass, data = ac_reduced)
-summary(ac_lm3)
-
-ac_plot_reduced <- ac_reduced %>%  
-  ggplot() + 
-  geom_point(aes(x=biomass, y=Conc_mean, color = Species), cex = 2) + 
-  #geom_errorbar(aes(x=biomass, y=Conc_mean, ymin = Conc_q.025, ymax = Conc_q.975, color = Species), width = 0) +
-  geom_smooth(aes(x=biomass,y=Conc_mean), method = "lm", formula = y ~ x, se = FALSE, color = "#6a6599", linetype = "dashed") +
-  theme_classic() + 
-  scale_color_manual(values = "#6a6599") + 
-  labs(x = "biomass (grams)",
-       y = "DNA concentration (copies per reaction)",
-       color = "") +
-  theme(legend.position = "top")
-ac_plot_reduced
-```
-
-```{r}
-pc_reduced <- combined_absconc %>%
-  filter(Species == "Pacific cod") %>%
-  #filter(biomass > 0) %>%
-  filter(difference < 0.3)  
-
-pc_lm3 <- lm(Conc_mean ~ biomass, data = pc_reduced)
-summary(pc_lm3)
-
-pc_plot_reduced <- pc_reduced %>%  
-  ggplot() + 
-  geom_point(aes(x=biomass, y=Conc_mean, color = Species), cex = 2) + 
-  #geom_errorbar(aes(x=biomass, y=Conc_mean, ymin = Conc_q.025, ymax = Conc_q.975, color = Species), width = 0) +
-  geom_smooth(aes(x=biomass,y=Conc_mean), method = "lm", formula = y ~ x, se = FALSE, color = "#79af97", linetype = "dashed") +
-  #geom_abline(slope = coef(pc_lm3)[2], intercept = coef(pc_lm3)[1], color = "blpck", linetype = "dashed") +
-  theme_classic() + 
-  scale_color_manual(values = "#79af97") + 
-  labs(x = "biomass (grams)",
-       y = "DNA concentration (copies per reaction)",
-       color = "") +
-  theme(legend.position = "top")
-pc_plot_reduced
-```
-
-plot all together
-```{r}
-combined_absconc %>%
-  #filter(biomass < 5000) %>%
-  #filter(biomass > 0) %>%
-  filter(difference < 0.3) %>%
-  ggplot() + 
-  geom_point(aes(x=biomass, y=Conc_mean, color = Species), cex = 2) + 
-  #geom_errorbar(aes(x=log10(biomass), y=Conc_mean, ymin = Conc_q.025, ymax = Conc_q.975, color = Species), width = 0) +
-  geom_smooth(aes(x=biomass,y=Conc_mean,color=Species), method = "lm", formula = y ~ x, se = FALSE, linetype = "dashed") + 
-  #geom_smooth(aes(x=biomass,y=Conc_mean,color=Species), method = "lm", formula = y ~ x -1, se = FALSE) + 
-  theme_classic() + 
-  scale_color_manual(values = mypal) + 
-  labs(x = "biomass",
-       y = "DNA copy number") 
-```
-
-
-combine plots
-```{r, fig.width=10, fig.height=4}
-library(patchwork)
-
-reduced_fig <- ac_plot_reduced + pc_plot_reduced + plot_layout(guides = 'keep') + plot_annotation(tag_levels = 'A') &
-    theme(plot.tag = element_text(face = 'bold'))
-reduced_fig
-```
-
-```{r}
-ggsave("my_figures/ac_pc_estimates_updated.png", plot = reduced_fig, width = 8, height = 4, dpi = 300)
-```
-
